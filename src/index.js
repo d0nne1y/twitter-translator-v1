@@ -101,12 +101,41 @@ function normalizeHttpUrl(url='') {
     return null;
   }
 }
+function escapeMarkdownLinkLabel(value='') {
+  // W etykiecie linku wystarczy zabezpieczyć znaki, które mogą zamknąć
+  // składnię Markdown albo zmienić jej formatowanie.
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/([\[\]_*~`])/g, '\\$1')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
+function isStableAuthorLabel(value='') {
+  const label = String(value).trim();
+  if (!label || label.length > 80) return false;
+  // Emoji, symbole typu ™, #, nawiasy i pionowe kreski potrafią sprawić,
+  // że klient Discorda pokaże surową składnię linku zamiast hiperłącza.
+  return /^[\p{L}\p{N}\p{M} .,'’&+\-]+$/u.test(label);
+}
+
+function authorLinkLabel(tweet) {
+  const displayName = authorDisplayName(tweet);
+  const handle = cleanHandle(tweet?.authorUser || tweet?.user || '');
+  // Ładna nazwa zostaje, gdy jest bezpieczna dla parsera Discorda.
+  // Przy nazwach z emoji/symbolami używamy handle bez @ — handle X ma
+  // ograniczony, przewidywalny zestaw znaków i działa stabilnie.
+  return isStableAuthorLabel(displayName) ? displayName : (handle || displayName || 'Otwórz wpis');
+}
+
 function maskedLink(label, url) {
   const safeUrl = normalizeHttpUrl(url);
   if (!safeUrl) return escapeMarkdownText(label);
-  // Discord lepiej parsuje adres w nawiasach ostrych, szczególnie gdy handle
-  // zawiera podkreślenia albo nazwa autora ma znak #.
-  return `[${escapeMarkdownText(label)}](<${safeUrl}>)`;
+  const safeLabel = escapeMarkdownLinkLabel(label) || 'Otwórz wpis';
+  // Standardowy zapis bez <...>. Nawiasy ostre były przyczyną wyświetlania
+  // surowego Markdownu dla części nazw użytkowników w Components V2.
+  const finalUrl = safeUrl.replace(/\)/g, '%29').replace(/\(/g, '%28');
+  return `[${safeLabel}](${finalUrl})`;
 }
 function langBadge(tweet, didTranslate) {
   if (!SHOW_LANGUAGE_BADGE) return '';
@@ -724,7 +753,7 @@ async function buildQuotedContext(quoted) {
     ? xUrl(quoted.authorUser || quoted.user, quoted.id)
     : null;
   const author = quoteUrl
-    ? `### ${maskedLink(authorLabel(quoted), quoteUrl)}`
+    ? `### ${maskedLink(authorLinkLabel(quoted), quoteUrl)}`
     : `### ${escapeMarkdownText(authorLabel(quoted))}`;
   const stats = buildStatsLine(quoted);
   const lines = [author];
@@ -778,7 +807,7 @@ function toLargeComponentText(text, level = 3) {
 
 function buildComponentAuthorHeader(tweet, headingLevel = 2) {
   const authorUrl = xUrl(tweet.authorUser || tweet.user, tweet.id);
-  const heading = `${'#'.repeat(Math.min(3, Math.max(1, headingLevel)))} ${maskedLink(authorLabel(tweet), authorUrl)}`;
+  const heading = `${'#'.repeat(Math.min(3, Math.max(1, headingLevel)))} ${maskedLink(authorLinkLabel(tweet), authorUrl)}`;
   const stats = buildComponentStats(tweet);
   return [heading, stats].filter(Boolean).join('\n');
 }
