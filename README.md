@@ -1,8 +1,9 @@
-# Twitter Translator v18 Stable Video
+# Twitter Translator v19 No Buttons
 
-Stabilny układ:
+Układ:
+- brak przycisków `Otwórz player` / `Otwórz na X`,
 - zdjęcia: skondensowana galeria w jednym embedzie,
-- video: najpierw wpis/tłumaczenie w embedzie, potem osobna wiadomość z linkiem FxTwitter, żeby Discord zawsze wyrenderował odtwarzacz,
+- video: najpierw czysty wpis/tłumaczenie, potem osobna wiadomość z linkiem FxTwitter, żeby Discord wyrenderował odtwarzacz,
 - bez sekcji Oryginał,
 - EN/PL bez tłumaczenia,
 - inne języki tłumaczy na PL,
@@ -19,5 +20,3 @@ VIDEO_LINK_MODE=player
 PHOTO_UPLOAD_LIMIT_MB=8
 DEEPL_API_KEY=opcjonalnie
 ```
-
-Nie używaj już `MAX_VIDEO_UPLOAD_MB`, `UPLOAD_VIDEO_ATTACHMENT`, `VIDEO_FALLBACK_LINK_MODE`.

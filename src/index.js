@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { Buffer } from 'node:buffer';
-import { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import sharp from 'sharp';
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -132,13 +132,6 @@ async function translateText(text, from, to) {
   return (json?.[0] || []).map(x => x?.[0] || '').join('').trim() || text;
 }
 
-function buildButtons(fx, x) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Otwórz player').setURL(fx),
-    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Otwórz na X').setURL(x)
-  );
-}
-
 function buildNativeContent(tweet, translated, didTranslate, fx, hasVideo) {
   const header = `**${tweet.authorName} (@${tweet.authorUser})**`;
   const mode = didTranslate ? `🌍 **${langLabel(tweet.lang)} → PL**` : `**${langLabel(tweet.lang)} · bez tłumaczenia**`;
@@ -239,12 +232,11 @@ function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = n
 async function sendTweetMessage(message, tweet, translated, didTranslate, fx, originalX) {
   const hasVideo = Boolean(tweet.media.video);
   const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
-  const components = [buildButtons(fx, originalX)];
 
   // VIDEO: najczyściej = najpierw przetłumaczony wpis, potem player FxTwitter pod spodem.
   if (hasVideo) {
     const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo pojawi się poniżej wpisu.**');
-    await message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
+    await message.channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
     // Druga wiadomość jest celowa: wtedy Discord renderuje odtwarzacz FxTwitter POD przetłumaczonym wpisem.
     if (VIDEO_LINK_MODE === 'player') {
       await new Promise(r => setTimeout(r, 350));
@@ -259,25 +251,25 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
       const collage = await buildPhotoCollage(tweet);
       if (collage) {
         const embed = buildMainEmbed(tweet, translated, didTranslate, collage.name);
-        return await message.channel.send({ embeds: [embed], files: [collage], components, allowedMentions: { parse: [] } });
+        return await message.channel.send({ embeds: [embed], files: [collage], allowedMentions: { parse: [] } });
       }
     } catch (e) {
       console.warn('Nie udało się zrobić galerii zdjęć, fallback do pierwszego zdjęcia:', e.message);
     }
 
     const embed = buildFallbackEmbed(tweet, translated, didTranslate, tweet.media.photos[0], 'Nie udało się złożyć galerii, więc pokazuję pierwsze zdjęcie.');
-    return message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
+    return message.channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
   }
 
   const embed = buildMainEmbed(tweet, translated, didTranslate);
-  return message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
+  return message.channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
 }
 
 client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v16 clean layout - no original text in embeds, compact photo gallery, video below tweet`);
+  console.log(`Tryb mediów: v19 no buttons - compact photo gallery, stable video player below tweet`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
