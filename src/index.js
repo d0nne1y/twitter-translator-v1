@@ -241,12 +241,16 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
   const components = [buildButtons(fx, originalX)];
 
-  // VIDEO: najlepszy kompromis = jedna wiadomość bota: czysty wpis + link FxTwitter, żeby Discord dorobił player w tej samej wiadomości.
-  // Uwaga: Discord nie pozwala wstawić odtwarzacza video bezpośrednio do własnego embeda bota.
+  // VIDEO: najczyściej = najpierw przetłumaczony wpis, potem player FxTwitter pod spodem.
   if (hasVideo) {
-    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo poniżej w tej samej wiadomości.**');
-    const content = VIDEO_LINK_MODE === 'player' ? fx : '';
-    return message.channel.send({ content, embeds: [embed], components, allowedMentions: { parse: [] } });
+    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo pojawi się poniżej wpisu.**');
+    await message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
+    // Druga wiadomość jest celowa: wtedy Discord renderuje odtwarzacz FxTwitter POD przetłumaczonym wpisem.
+    if (VIDEO_LINK_MODE === 'player') {
+      await new Promise(r => setTimeout(r, 350));
+      return message.channel.send({ content: fx, allowedMentions: { parse: [] } });
+    }
+    return null;
   }
 
   // ZDJĘCIA: jedna skondensowana galeria 1/2/4 w jednym embedzie.
@@ -273,7 +277,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v17 one-message video layout - clean embed + FxTwitter player in same bot message`);
+  console.log(`Tryb mediów: v16 clean layout - no original text in embeds, compact photo gallery, video below tweet`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 

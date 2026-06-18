@@ -1,15 +1,16 @@
-# Twitter Translator v17 – one-message video layout
+# Twitter Translator v18 Stable Video
 
-Zmiany:
-- wideo próbuje renderować się w tej samej wiadomości bota co tłumaczenie,
-- zdjęcia dalej jako skondensowana galeria,
+Stabilny układ:
+- zdjęcia: skondensowana galeria w jednym embedzie,
+- video: najpierw wpis/tłumaczenie w embedzie, potem osobna wiadomość z linkiem FxTwitter, żeby Discord zawsze wyrenderował odtwarzacz,
 - bez sekcji Oryginał,
 - EN/PL bez tłumaczenia,
-- inne języki tłumaczone na PL,
-- DeepL używany, jeśli ustawisz prawdziwy DEEPL_API_KEY.
+- inne języki tłumaczy na PL,
+- usuwa oryginalną wiadomość, jeśli `DELETE_ORIGINAL_MESSAGE=true`.
 
-Render env:
-```
+## Render env
+
+```env
 DISCORD_TOKEN=...
 TARGET_LANG=pl
 IGNORE_LANGS=en,pl
@@ -18,3 +19,5 @@ VIDEO_LINK_MODE=player
 PHOTO_UPLOAD_LIMIT_MB=8
 DEEPL_API_KEY=opcjonalnie
 ```
+
+Nie używaj już `MAX_VIDEO_UPLOAD_MB`, `UPLOAD_VIDEO_ATTACHMENT`, `VIDEO_FALLBACK_LINK_MODE`.
