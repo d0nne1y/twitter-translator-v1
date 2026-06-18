@@ -1,16 +1,12 @@
-# Twitter Translator v27 — video spacing polish
+# Twitter Translator v28 — video minimal, zdjęcia bez zmian
 
 Zmiany:
-- video: pogrubiony autor jako link do X,
-- większy odstęp między autorem a tekstem,
-- podpis `🎬 Odtwarzacz wpisu` przed playerem,
-- opcjonalny test ukrytego linku FxTwitter przez `VIDEO_LINK_STYLE=spoiler`,
-- zdjęcia bez zmian: skondensowana galeria,
-- bez sekcji Oryginał.
+- dla wpisów z video bot wysyła tylko przetłumaczony tekst + link FxTwitter, bez autora i bez napisu „Odtwarzacz wpisu”;
+- przerwa między tekstem a linkiem zostaje;
+- zdjęcia zostają jak wcześniej: skondensowana galeria w embedzie;
+- FxTwitter link musi być widoczny, żeby Discord wygenerował player.
 
-## Render — zmienne
-
-Zostaw:
+Render — zalecane zmienne:
 
 ```env
 DISCORD_TOKEN=...
@@ -18,18 +14,10 @@ TARGET_LANG=pl
 IGNORE_LANGS=en,pl
 DELETE_ORIGINAL_MESSAGE=true
 PHOTO_UPLOAD_LIMIT_MB=8
-VIDEO_LINK_MODE=player
-SHOW_FOOTER=false
-SHOW_LANGUAGE_BADGE=false
+VIDEO_LINK_STYLE=plain
+TRANSLATOR_PROVIDER=auto
+OPENAI_API_KEY=... # opcjonalnie
+DEEPL_API_KEY=... # opcjonalnie
 ```
 
-Opcjonalnie dodaj:
-
-```env
-VIDEO_LINK_STYLE=labeled
-```
-
-Możliwe wartości:
-- `labeled` — polecane: pokazuje `🎬 Odtwarzacz wpisu` + link, player działa stabilnie,
-- `plain` — sam link bez podpisu,
-- `spoiler` — test ukrytego linku; jeśli player się nie pokaże, wróć na `labeled`.
+Nie wrzucaj `.env` na GitHuba.

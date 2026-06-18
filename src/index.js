@@ -364,28 +364,19 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
   // dostajesz jeden wpis bota: tłumaczenie na górze i odtwarzalny player pod spodem.
   if (hasVideo) {
-    // VIDEO: minimalistyczny układ, bo FxTwitter i tak pokazuje statystyki, autora i player.
-    // Celowo NIE dodajemy tutaj statystyk ani etykiet typu 'automatyczne tłumaczenie', żeby nie dublować informacji.
-    const header = `**[${authorLabel(tweet)}](${originalX})**`;
+    // VIDEO v28: ultra-clean. Bez autora i bez etykiety "Odtwarzacz wpisu".
+    // Autor, statystyki i player są już widoczne w karcie FxTwitter, więc tutaj zostawiamy tylko tekst + link.
     const bodyParts = [];
     if (summary) bodyParts.push(`**W skrócie:** ${truncate(summary, 180)}`, '');
     bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 1000)));
 
-    // Link FxTwitter musi być obecny jako zwykły tekst, żeby Discord wyrenderował player.
-    // v27: więcej odstępu po autorze i przed playerem + czytelny podpis zamiast gołego linku.
-    // VIDEO_LINK_STYLE=spoiler testuje ukryty link: jeśli Discord nie wyrenderuje playera, ustaw z powrotem labeled.
+    // Link FxTwitter musi być jawny jako osobna linia, żeby Discord stabilnie wyrenderował player.
     const playerLink = VIDEO_LINK_STYLE === 'spoiler' ? `||${fx}||` : fx;
-    const playerBlock = VIDEO_LINK_STYLE === 'plain'
-      ? playerLink
-      : `🎬 **Odtwarzacz wpisu**
-${playerLink}`;
 
     const content = [
-      header,
-      '',
       bodyParts.join('\n'),
       '',
-      playerBlock
+      playerLink
     ].join('\n');
 
     return message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
@@ -415,7 +406,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v27 video spacing + labeled player + pro photo UI`);
+  console.log(`Tryb mediów: v28 video minimal + pro photo UI`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
