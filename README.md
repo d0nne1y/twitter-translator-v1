@@ -1,30 +1,44 @@
-# Twitter Translator v23 polished UI
+# Twitter Translator v24 Pro UI + AI
 
-Wersja kosmetyczna:
-- czystszy embed dla zdjęć,
-- skondensowana galeria zdjęć jak wcześniej,
-- video: autor + tekst + player FxTwitter pod spodem,
-- bez etykiet typu „Automatyczne tłumaczenie”,
-- autor jest linkiem do oryginalnego wpisu,
-- opcjonalny badge języka przez `SHOW_LANGUAGE_BADGE=true`.
+Wersja kosmetyczna i translatorska:
+- zdjęcia jako skondensowana galeria,
+- video jako stabilny player FxTwitter,
+- bez sekcji „Oryginał”,
+- autor jako link do wpisu,
+- opcjonalne statystyki tweeta,
+- opcjonalne streszczenie,
+- tłumaczenie: OpenAI → DeepL → Google fallback.
 
-## Render ENV
-Zalecane:
+## Render – Environment Variables
+
+Wymagane:
 
 ```env
-DISCORD_TOKEN=...
+DISCORD_TOKEN=token_bota
 TARGET_LANG=pl
 IGNORE_LANGS=en,pl
 DELETE_ORIGINAL_MESSAGE=true
-PHOTO_UPLOAD_LIMIT_MB=8
 VIDEO_LINK_MODE=player
-SHOW_LANGUAGE_BADGE=false
-SHOW_FOOTER=false
-DEEPL_API_KEY=opcjonalnie
+PHOTO_UPLOAD_LIMIT_MB=8
 ```
 
-Jeżeli chcesz pokazywać np. `🇵🇹 → 🇵🇱`, ustaw:
+Polecane:
 
 ```env
-SHOW_LANGUAGE_BADGE=true
+OPENAI_API_KEY=twój_klucz_openai
+OPENAI_MODEL=gpt-4o-mini
+TRANSLATOR_PROVIDER=auto
+SHOW_STATS=true
+SHOW_LANGUAGE_BADGE=false
+SHOW_FOOTER=false
+SHOW_SUMMARY=false
 ```
+
+Opcjonalnie DeepL:
+
+```env
+DEEPL_API_KEY=twój_klucz_deepl
+```
+
+`TRANSLATOR_PROVIDER=auto` oznacza: najpierw OpenAI, potem DeepL, potem Google.
+Jeśli chcesz wymusić jeden silnik: `openai`, `deepl` albo `google`.
