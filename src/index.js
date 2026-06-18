@@ -371,10 +371,13 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
     bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 1000)));
 
     // Link FxTwitter musi być jawny w wiadomości, żeby Discord wyrenderował odtwarzacz.
+    // Hiperłącze w nicku NIE wystarcza do playera, więc robimy czysty układ: autor -> większy odstęp -> tekst -> player.
     const content = [
       header,
       '',
+      '',
       bodyParts.join('\n'),
+      '',
       '',
       fx
     ].filter(x => x !== '').join('\n');
@@ -406,7 +409,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v25 clean video + pro photo UI + OpenAI/DeepL fallback`);
+  console.log(`Tryb mediów: v26 polished video spacing + pro photo UI`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
