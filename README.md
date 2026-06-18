@@ -1,16 +1,20 @@
-# Twitter Translator v20 - Video single message
+# Twitter Translator v21 – clean layout
 
 Zmiany:
-- video: brak dodatkowego embeda u góry; bot wysyła tłumaczenie i link FxTwitter w jednej wiadomości, więc player renderuje się pod tłumaczeniem,
-- zdjęcia: nadal skondensowana galeria w jednym embedzie,
-- EN/PL pokazuje bez tłumaczenia, inne języki tłumaczy na PL,
-- DELETE_ORIGINAL_MESSAGE usuwa oryginalny link użytkownika.
+- usunięte nagłówki typu `Hiszpański → PL` / `Angielski · bez tłumaczenia`,
+- autor tweeta jest klikalny i prowadzi do oryginalnego wpisu na X,
+- zdjęcia zostają jako skondensowana galeria,
+- video: czysty tekst + link FxTwitter, żeby Discord stabilnie zrobił player pod wiadomością,
+- `Oryginał` nie jest pokazywany w embedzie,
+- DeepL jako główny tłumacz, Google jako fallback.
 
 Render env:
+```
 DISCORD_TOKEN=...
 TARGET_LANG=pl
 IGNORE_LANGS=en,pl
 DELETE_ORIGINAL_MESSAGE=true
-VIDEO_LINK_MODE=player
 PHOTO_UPLOAD_LIMIT_MB=8
+VIDEO_LINK_MODE=player
 DEEPL_API_KEY=opcjonalnie
+```

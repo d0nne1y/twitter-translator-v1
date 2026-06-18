@@ -147,10 +147,9 @@ function buildNativeContent(tweet, translated, didTranslate, fx, hasVideo) {
 function buildFallbackEmbed(tweet, translated, didTranslate, imageUrl=null, note='') {
   const e = new EmbedBuilder()
     .setColor(didTranslate ? 0x00AEEF : 0x5865F2)
-    .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined })
-    .setTitle(didTranslate ? `🌍 ${langLabel(tweet.lang)} → PL` : `${langLabel(tweet.lang)} · bez tłumaczenia`)
+    .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
     .setDescription([truncate(translated || 'Brak tekstu.', 1200), note].filter(Boolean).join('\n\n'))
-    .setFooter({ text: didTranslate ? 'Automatyczne tłumaczenie' : 'Oryginał bez tłumaczenia' });
+    .setFooter({ text: didTranslate ? 'Automatyczne tłumaczenie' : 'Bez tłumaczenia' });
   if (imageUrl) e.setImage(imageUrl);
   return e;
 }
@@ -218,8 +217,7 @@ async function buildPhotoCollage(tweet) {
 function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = null, note = '') {
   const e = new EmbedBuilder()
     .setColor(didTranslate ? 0x00AEEF : 0x5865F2)
-    .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined })
-    .setTitle(didTranslate ? `🌍 ${langLabel(tweet.lang)} → PL` : `${langLabel(tweet.lang)} · bez tłumaczenia`)
+    .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
     .setDescription([
       truncate(translated || 'Brak tekstu.', 950),
       note
@@ -237,14 +235,14 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
   // dostajesz jeden wpis bota: tłumaczenie na górze i odtwarzalny player pod spodem.
   if (hasVideo) {
-    const header = `**${tweet.authorName} (@${tweet.authorUser})**`;
-    const title = didTranslate ? `🌍 **${langLabel(tweet.lang)} → PL**` : `**${langLabel(tweet.lang)} · bez tłumaczenia**`;
+    const header = `**[${tweet.authorName} (@${tweet.authorUser})](${originalX})**`;
     const body = truncate(translated || 'Brak tekstu.', 900);
     const label = didTranslate ? '*Automatyczne tłumaczenie*' : '*Bez tłumaczenia*';
 
+    // Najstabilniejszy układ video: krótki tekst + jawny link FxTwitter.
+    // Link musi być widoczny, żeby Discord wyrenderował odtwarzacz video pod wiadomością.
     const content = [
       header,
-      title,
       '',
       body,
       '',
@@ -280,7 +278,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v20 video single message - compact photos, video translation + FxTwitter player in one message`);
+  console.log(`Tryb mediów: v21 clean linked author - compact photos, cleaner video with FxTwitter player`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
