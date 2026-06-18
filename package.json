@@ -1,7 +1,7 @@
 {
   "name": "twitter-translator-discord-bot",
-  "version": "1.6.2",
-  "description": "Discord bot: X/Twitter translator with readable Components V2 with clean clickable display names, ordered quote media and DeepL/Google translation",
+  "version": "1.7.0",
+  "description": "Discord bot: X/Twitter translator with Components V2, clickable authors, profile avatars, ordered quote media and DeepL/Google translation",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import {
   Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder,
   ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder,
-  SeparatorBuilder, SeparatorSpacingSize, MessageFlags
+  SectionBuilder, ThumbnailBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags
 } from 'discord.js';
 import sharp from 'sharp';
 
@@ -776,40 +776,53 @@ function toLargeComponentText(text, level = 3) {
     .join('\n');
 }
 
-function buildVideoMainText(tweet, translated, didTranslate) {
+function buildComponentAuthorHeader(tweet, headingLevel = 2) {
   const authorUrl = xUrl(tweet.authorUser || tweet.user, tweet.id);
-  const header = `## ${maskedLink(authorLabel(tweet), authorUrl)}`;
+  const heading = `${'#'.repeat(Math.min(3, Math.max(1, headingLevel)))} ${maskedLink(authorLabel(tweet), authorUrl)}`;
   const stats = buildComponentStats(tweet);
-  const body = toLargeComponentText(truncate(translated || 'Brak tekstu.', 1300), 3);
-  const top = [header, stats].filter(Boolean).join('\n');
+  return [heading, stats].filter(Boolean).join('\n');
+}
 
-  // Dwie nowe linie pomiędzy nagłówkiem/metadanymi a treścią wpisu dają
-  // więcej oddechu i poprawiają czytelność bez zmiany układu mediów.
-  return truncate(`${top}\n\n${body}`, 1800);
+function buildComponentBody(text, limit = 1300, level = 3) {
+  return toLargeComponentText(truncate(text || 'Brak tekstu.', limit), level);
+}
+
+function buildAuthorSection(tweet, headingLevel = 2) {
+  const header = buildComponentAuthorHeader(tweet, headingLevel);
+  const avatarUrl = normalizeHttpUrl(tweet?.authorAvatar || '');
+
+  // Section wymaga akcesorium. Gdy API zwróci poprawny avatar autora,
+  // pokazujemy go obok klikalnej nazwy konta i statystyk.
+  if (avatarUrl) {
+    return new SectionBuilder()
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(header)
+      )
+      .setThumbnailAccessory(
+        new ThumbnailBuilder()
+          .setURL(avatarUrl)
+          .setDescription(`Zdjęcie profilowe: ${authorLabel(tweet)}`)
+      );
+  }
+
+  return null;
+}
+
+function buildVideoMainText(tweet, translated, didTranslate) {
+  return buildComponentBody(translated, 1300, 3);
+}
+
+function buildVideoQuoteHeader(quoted) {
+  return buildComponentAuthorHeader(quoted, 3);
 }
 
 function buildVideoQuoteText(quoted, quotedContext) {
   if (!quoted || !quotedContext) return '';
-
-  const quoteUrl = quoted.id && quoted.id !== 'quoted'
-    ? xUrl(quoted.authorUser || quoted.user, quoted.id)
-    : null;
-  const author = quoteUrl
-    ? `### ${maskedLink(authorLabel(quoted), quoteUrl)}`
-    : `### ${escapeMarkdownText(authorLabel(quoted))}`;
-  const stats = buildComponentStats(quoted);
-  const body = toLargeComponentText(truncate(
+  return buildComponentBody(
     quotedContext.displayText || quoted.text || 'Brak tekstu w cytowanym wpisie.',
-    850
-  ), 3);
-
-  const top = [
-    '## ↪ Cytowany wpis',
-    author,
-    stats
-  ].filter(Boolean).join('\n');
-
-  return truncate(`${top}\n\n${body}`, 1400);
+    850,
+    3
+  );
 }
 
 function buildComponentMediaGallery(tweet, labelPrefix = 'Media z wpisu') {
@@ -842,10 +855,22 @@ function buildComponentMediaGallery(tweet, labelPrefix = 'Media z wpisu') {
 
 async function sendComponentsV2Tweet(message, tweet, translated, didTranslate, quotedContext) {
   const container = new ContainerBuilder()
-    .setAccentColor(didTranslate ? 0x00B7FF : 0x5865F2)
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(buildVideoMainText(tweet, translated, didTranslate))
+    .setAccentColor(didTranslate ? 0x00B7FF : 0x5865F2);
+
+  // Nagłówek autora: klikalna nazwa + statystyki, a obok aktualny avatar z X.
+  // Jeśli API nie zwróci avatara, używamy zwykłego TextDisplay jako fallback.
+  const mainAuthorSection = buildAuthorSection(tweet, 2);
+  if (mainAuthorSection) {
+    container.addSectionComponents(mainAuthorSection);
+  } else {
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(buildComponentAuthorHeader(tweet, 2))
     );
+  }
+
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(buildVideoMainText(tweet, translated, didTranslate))
+  );
 
   // Najpierw media głównego wpisu — dokładnie pod jego tekstem.
   const mainGallery = buildComponentMediaGallery(tweet, 'Media głównego wpisu');
@@ -855,15 +880,28 @@ async function sendComponentsV2Tweet(message, tweet, translated, didTranslate, q
 
   // Dopiero potem cytowany wpis i jego własne media.
   if (quotedContext && tweet.quoted) {
-    container
-      .addSeparatorComponents(
-        new SeparatorBuilder()
-          .setDivider(true)
-          .setSpacing(SeparatorSpacingSize.Large)
-      )
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(buildVideoQuoteText(tweet.quoted, quotedContext))
+    container.addSeparatorComponents(
+      new SeparatorBuilder()
+        .setDivider(true)
+        .setSpacing(SeparatorSpacingSize.Large)
+    );
+
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent('## ↪ Cytowany wpis')
+    );
+
+    const quotedAuthorSection = buildAuthorSection(tweet.quoted, 3);
+    if (quotedAuthorSection) {
+      container.addSectionComponents(quotedAuthorSection);
+    } else {
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(buildVideoQuoteHeader(tweet.quoted))
       );
+    }
+
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(buildVideoQuoteText(tweet.quoted, quotedContext))
+    );
 
     const quotedGallery = buildComponentMediaGallery(tweet.quoted, 'Media cytowanego wpisu');
     if (quotedGallery) {
@@ -965,7 +1003,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v43 poprawione hiperłącza autorów dla zdjęć, GIF-ów i filmów`);
+  console.log(`Tryb mediów: v44 avatary autorów obok nazw w Components V2`);
   console.log(`Renderowanie wideo: ${VIDEO_RENDER_MODE}`);
 });
 
