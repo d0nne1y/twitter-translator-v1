@@ -1,17 +1,17 @@
 {
   "name": "twitter-translator-discord-bot",
-  "version": "1.7.0",
-  "description": "Discord bot: X/Twitter translator with Components V2, clickable authors, profile avatars, ordered quote media and DeepL/Google translation",
+  "version": "1.7.1",
+  "description": "Discord bot for translating X posts",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "start": "node src/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.16.0"
   },
   "dependencies": {
-    "discord.js": "^14.22.1",
-    "sharp": "^0.33.5"
+    "discord.js": "14.22.1",
+    "sharp": "0.33.5"
   }
 }
