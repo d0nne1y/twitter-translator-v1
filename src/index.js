@@ -363,20 +363,18 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
   // dostajesz jeden wpis bota: tłumaczenie na górze i odtwarzalny player pod spodem.
   if (hasVideo) {
+    // VIDEO: minimalistyczny układ, bo FxTwitter i tak pokazuje statystyki, autora i player.
+    // Celowo NIE dodajemy tutaj statystyk ani etykiet typu 'automatyczne tłumaczenie', żeby nie dublować informacji.
     const header = `**[${authorLabel(tweet)}](${originalX})**`;
-    const meta = buildMetaLine(tweet, didTranslate);
     const bodyParts = [];
     if (summary) bodyParts.push(`**W skrócie:** ${truncate(summary, 180)}`, '');
     bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 1000)));
-    const body = bodyParts.join('\n');
 
-    // Player FxTwitter wymaga jawnego linku w treści wiadomości.
-    // Układ jest celowo czysty: autor -> tekst -> player.
+    // Link FxTwitter musi być jawny w wiadomości, żeby Discord wyrenderował odtwarzacz.
     const content = [
       header,
-      meta ? `*${meta}*` : '',
       '',
-      body,
+      bodyParts.join('\n'),
       '',
       fx
     ].filter(x => x !== '').join('\n');
@@ -408,7 +406,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v24 pro UI + OpenAI/DeepL fallback + stats`);
+  console.log(`Tryb mediów: v25 clean video + pro photo UI + OpenAI/DeepL fallback`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 

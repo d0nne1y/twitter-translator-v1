@@ -1,7 +1,7 @@
 {
   "name": "twitter-translator-discord-bot",
-  "version": "1.19.0",
-  "description": "Discord bot: clean tweet translation, compact photo gallery, stable video player below embed, no buttons",
+  "version": "1.25.0",
+  "description": "Discord bot: clean video layout, pro photo gallery, AI/DeepL translation",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
