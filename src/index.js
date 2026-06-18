@@ -12,6 +12,8 @@ const PORT = Number(process.env.PORT || 10000);
 const PHOTO_UPLOAD_LIMIT_MB = Number(process.env.PHOTO_UPLOAD_LIMIT_MB || 8);
 const PHOTO_UPLOAD_LIMIT_BYTES = Math.max(1, PHOTO_UPLOAD_LIMIT_MB) * 1024 * 1024;
 const VIDEO_LINK_MODE = (process.env.VIDEO_LINK_MODE || 'player').toLowerCase(); // player | buttons_only
+const SHOW_LANGUAGE_BADGE = String(process.env.SHOW_LANGUAGE_BADGE || 'false').toLowerCase() === 'true';
+const SHOW_FOOTER = String(process.env.SHOW_FOOTER || 'false').toLowerCase() === 'true';
 
 if (!DISCORD_TOKEN) {
   console.error('Brak DISCORD_TOKEN w Environment Variables.');
@@ -34,6 +36,20 @@ const langNames = {
 };
 
 function langLabel(code) { return langNames[(code || '').toLowerCase()] || (code || 'Nieznany').toUpperCase(); }
+const langFlags = { en:'🇬🇧', pl:'🇵🇱', es:'🇪🇸', pt:'🇵🇹', fr:'🇫🇷', it:'🇮🇹', de:'🇩🇪', ar:'🇸🇦', tr:'🇹🇷', nl:'🇳🇱', ja:'🇯🇵', ko:'🇰🇷', ru:'🇷🇺', uk:'🇺🇦' };
+function langFlag(code) { return langFlags[(code || '').toLowerCase()] || '🌍'; }
+function prettyText(text='') {
+  return String(text)
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+function authorLabel(tweet) { return `${tweet.authorName} (@${tweet.authorUser})`; }
+function langBadge(tweet, didTranslate) {
+  if (!SHOW_LANGUAGE_BADGE) return '';
+  return didTranslate ? `${langFlag(tweet.lang)} → 🇵🇱` : `${langFlag(tweet.lang)} bez tłumaczenia`;
+}
 function cleanText(t='') { return String(t).replace(/https?:\/\/\S+/g, '').trim(); }
 function truncate(t='', n=1000) { return t.length > n ? t.slice(0, n - 1) + '…' : t; }
 function fxUrl(user, id) { return `https://fxtwitter.com/${user}/status/${id}`; }
@@ -145,11 +161,13 @@ function buildNativeContent(tweet, translated, didTranslate, fx, hasVideo) {
 }
 
 function buildFallbackEmbed(tweet, translated, didTranslate, imageUrl=null, note='') {
+  const badge = langBadge(tweet, didTranslate);
+  const description = [badge ? `**${badge}**` : '', prettyText(truncate(translated || 'Brak tekstu.', 1300)), note].filter(Boolean).join('\n\n');
   const e = new EmbedBuilder()
-    .setColor(didTranslate ? 0x00AEEF : 0x5865F2)
-    .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
-    .setDescription([truncate(translated || 'Brak tekstu.', 1200), note].filter(Boolean).join('\n\n'))
-    // Stopka celowo wyłączona dla czystszego wyglądu.
+    .setColor(didTranslate ? 0x00B7FF : 0x5865F2)
+    .setAuthor({ name: authorLabel(tweet), iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
+    .setDescription(description);
+  if (SHOW_FOOTER) e.setFooter({ text: didTranslate ? 'Przetłumaczono automatycznie' : 'Bez tłumaczenia' });
   if (imageUrl) e.setImage(imageUrl);
   return e;
 }
@@ -215,15 +233,19 @@ async function buildPhotoCollage(tweet) {
 }
 
 function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = null, note = '') {
+  const badge = langBadge(tweet, didTranslate);
+  const description = [
+    badge ? `**${badge}**` : '',
+    prettyText(truncate(translated || 'Brak tekstu.', 1200)),
+    note
+  ].filter(Boolean).join('\n\n');
+
   const e = new EmbedBuilder()
-    .setColor(didTranslate ? 0x00AEEF : 0x5865F2)
-    .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
-    .setDescription([
-      truncate(translated || 'Brak tekstu.', 950),
-      note
-    ].filter(Boolean).join('\n\n'))
-    // Bez stopki typu 'Automatyczne tłumaczenie' — czystszy wygląd.
-    ;
+    .setColor(didTranslate ? 0x00B7FF : 0x5865F2)
+    .setAuthor({ name: authorLabel(tweet), iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
+    .setDescription(description);
+
+  if (SHOW_FOOTER) e.setFooter({ text: didTranslate ? 'Przetłumaczono automatycznie' : 'Bez tłumaczenia' });
   if (imageAttachmentName) e.setImage(`attachment://${imageAttachmentName}`);
   return e;
 }
@@ -236,17 +258,20 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
   // dostajesz jeden wpis bota: tłumaczenie na górze i odtwarzalny player pod spodem.
   if (hasVideo) {
-    const header = `**[${tweet.authorName} (@${tweet.authorUser})](${originalX})**`;
-    const body = truncate(translated || 'Brak tekstu.', 900);
-    // Najstabilniejszy układ video: tekst + jawny link FxTwitter.
-    // Uwaga: jeśli link będzie ukryty jako markdown [autor](url), Discord NIE wyrenderuje playera.
+    const header = `**[${authorLabel(tweet)}](${originalX})**`;
+    const badge = langBadge(tweet, didTranslate);
+    const body = prettyText(truncate(translated || 'Brak tekstu.', 1000));
+
+    // Player FxTwitter wymaga jawnego linku w treści wiadomości.
+    // Układ jest celowo czysty: autor -> tekst -> player.
     const content = [
       header,
+      badge ? `*${badge}*` : '',
       '',
       body,
       '',
       fx
-    ].join('\n');
+    ].filter(x => x !== '').join('\n');
 
     return message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
   }
@@ -275,7 +300,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v22 clean no labels - linked author, compact photos, video player fallback`);
+  console.log(`Tryb mediów: v23 polished UI - clean embeds, compact photos, stable video player`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
