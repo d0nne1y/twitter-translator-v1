@@ -90,13 +90,51 @@ function fxUrl(user, id) { return `https://fxtwitter.com/${user}/status/${id}`; 
 function xUrl(user, id) { return `https://x.com/${user}/status/${id}`; }
 function safeFilename(s='file') { return String(s).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80); }
 
+function parseTweetRefFromUrl(url='') {
+  const m = String(url).match(/https?:\/\/(?:www\.)?(?:x\.com|twitter\.com|fxtwitter\.com|fixupx\.com|vxtwitter\.com)\/([A-Za-z0-9_]{1,20})\/status(?:es)?\/(\d+)/i);
+  return m ? { user: m[1], id: m[2] } : null;
+}
+
+function collectDeepUrls(obj, out = []) {
+  if (!obj || out.length > 50) return out;
+  if (typeof obj === 'string') {
+    if (/https?:\/\//i.test(obj)) out.push(obj);
+    return out;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) collectDeepUrls(item, out);
+    return out;
+  }
+  if (typeof obj === 'object') {
+    for (const [k, v] of Object.entries(obj)) {
+      if (['url', 'expanded_url', 'display_url', 'unwound_url', 'text', 'full_text', 'content'].includes(k) || typeof v === 'object') {
+        collectDeepUrls(v, out);
+      }
+    }
+  }
+  return out;
+}
+
+function findQuotedReference(t, data, currentUser, currentId) {
+  const direct = [
+    t.quote_url, t.quoted_url, t.quoted_status_url, t.quotedTweetUrl, t.quoteTweetUrl,
+    data.quote_url, data.quoted_url, data.quoted_status_url, data.quotedTweetUrl, data.quoteTweetUrl
+  ].filter(Boolean);
+  const urls = [...direct, ...collectDeepUrls(t), ...collectDeepUrls(data)];
+  for (const u of urls) {
+    const ref = parseTweetRefFromUrl(u);
+    if (ref && String(ref.id) !== String(currentId)) return ref;
+  }
+  return null;
+}
+
 async function fetchJson(url) {
   const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 DiscordBot TwitterTranslator' } });
   if (!res.ok) throw new Error(`HTTP ${res.status} przy pobieraniu ${url}`);
   return res.json();
 }
 
-async function getTweet(user, id) {
+async function getTweet(user, id, depth = 0) {
   const apiUrls = [
     `https://api.fxtwitter.com/${user}/status/${id}`,
     `https://api.fxtwitter.com/status/${id}`
@@ -107,9 +145,26 @@ async function getTweet(user, id) {
       const data = await fetchJson(u);
       const t = data.tweet || data.status || data;
       const author = t.author || data.author || {};
-      const text = cleanText(t.text || t.full_text || t.content || '');
+      const rawText = t.text || t.full_text || t.content || '';
+      const text = cleanText(rawText);
       const lang = (t.lang || t.language || data.lang || '').toLowerCase() || guessLang(text);
       const media = normalizeMedia(t, data);
+
+      let quoted = normalizeQuoted(t, data);
+      // FxTwitter/X czasem nie zwraca cytowanego wpisu jako obiektu, tylko jako link w entities/text.
+      // Wtedy dociągamy cytowany tweet osobnym requestem.
+      if (!quoted && depth < 1) {
+        const ref = findQuotedReference(t, data, user, id);
+        if (ref && ref.id && String(ref.id) !== String(id)) {
+          try {
+            quoted = await getTweet(ref.user, ref.id, depth + 1);
+            quoted.isQuoted = true;
+          } catch (e) {
+            console.warn('Nie udało się dociągnąć cytowanego wpisu:', e.message);
+          }
+        }
+      }
+
       return {
         id,
         user,
@@ -121,7 +176,7 @@ async function getTweet(user, id) {
         verified: Boolean(author.verified || author.is_blue_verified || author.blue_verified || author.verified_type),
         stats: normalizeStats(t, data),
         media,
-        quoted: normalizeQuoted(t, data)
+        quoted
       };
     } catch (e) { lastErr = e; }
   }
@@ -480,7 +535,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v29 quoted tweets + video minimal + pro photo UI`);
+  console.log(`Tryb mediów: v30 quoted tweets fetch + video minimal + pro photo UI`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 

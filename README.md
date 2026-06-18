@@ -1,23 +1,5 @@
-# Twitter Translator v29 — cytowane wpisy
+# Twitter Translator v30 - quoted fetch fix
 
-Zmiany:
-- bot pokazuje cytowane wpisy/reposty z komentarzem jako dodatkowy embed pod głównym wpisem;
-- jeśli cytowany wpis ma zdjęcie/zdjęcia, bot robi z nich skondensowaną galerię;
-- video zostaje w minimalistycznym trybie: sam tekst + link FxTwitter, żeby Discord wygenerował player;
-- układ dla zwykłych zdjęć zostaje bez zmian.
+Poprawka cytowanych tweetów: jeśli FxTwitter API nie zwróci cytowanego wpisu jako obiektu, bot znajdzie link do cytowanego wpisu i dociągnie go osobnym requestem.
 
-Render — zalecane zmienne:
-
-```env
-DISCORD_TOKEN=...
-TARGET_LANG=pl
-IGNORE_LANGS=en,pl
-DELETE_ORIGINAL_MESSAGE=true
-PHOTO_UPLOAD_LIMIT_MB=8
-VIDEO_LINK_STYLE=plain
-TRANSLATOR_PROVIDER=auto
-OPENAI_API_KEY=... # opcjonalnie
-DEEPL_API_KEY=... # opcjonalnie
-```
-
-Nie wrzucaj `.env` ani `node_modules` na GitHuba.
+Wgrywasz jak poprzednio: GitHub -> commit -> Render redeploy.
