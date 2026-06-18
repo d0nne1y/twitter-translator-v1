@@ -1,56 +1,32 @@
-# Twitter Translator v34 — cytowane wpisy naprawione
+# Twitter Translator v35 — cytowany wpis w jednym embedzie
 
-Ta wersja bazuje bezpośrednio na przesłanym projekcie v33 i poprawia obsługę cytowanych wpisów.
+Ta wersja łączy główny wpis i cytowany wpis w **jeden embed Discorda**.
 
-## Najważniejsza poprawka
+## Co zmieniono
 
-W poprzedniej wersji cytowany wpis mógł zostać poprawnie pobrany, ale nie był dołączany do wiadomości Discorda, gdy główny wpis nie zawierał własnego zdjęcia ani filmu. To dotyczyło dokładnie przypadków typu:
+- cytowany wpis jest sekcją `↪ Cytowany wpis` wewnątrz głównego embeda,
+- nie powstaje już drugi embed pod głównym wpisem,
+- gdy główny i cytowany wpis mają zdjęcia, bot składa je pionowo w jeden obraz,
+- gdy tylko cytowany wpis ma zdjęcia, jego galeria pojawia się jako obraz głównego embeda,
+- przy wpisach z video kontekst cytatu jest dopisywany w tej samej wiadomości nad playerem FxTwitter,
+- tłumaczenie nadal działa: DeepL → Google Translate → oryginalny tekst.
 
-- główny wpis: sam tekst,
-- pod nim na X: cytowany wpis ze zdjęciem lub filmem.
+## Render
 
-v34 dołącza cytowany wpis także w tym układzie.
+Nie musisz zmieniać zmiennych środowiskowych. Zostaw obecne ustawienia.
 
-## Dodatkowe zabezpieczenia
-
-- obsługa `tweet.quote` zgodnie z API FxTwitter,
-- dodatkowe warianty nazw pól i zagnieżdżonych odpowiedzi,
-- fallback przez `api.vxtwitter.com`,
-- fallback przez Twitter Syndication z tokenem,
-- dociąganie cytowanego wpisu po ID lub adresie URL,
-- galeria zdjęć cytowanego wpisu,
-- tłumaczenie cytowanego wpisu, jeśli jego język nie znajduje się w `IGNORE_LANGS`,
-- brak podwójnego komunikatu startowego `ready`.
-
-## Render — zmienne
-
-Nie musisz dodawać żadnych nowych zmiennych. Zostaw:
-
-```env
-DISCORD_TOKEN=...
-DEEPL_API_KEY=...
-TARGET_LANG=pl
-IGNORE_LANGS=en,pl
-DELETE_ORIGINAL_MESSAGE=true
-PHOTO_UPLOAD_LIMIT_MB=8
-SHOW_FOOTER=false
-SHOW_LANGUAGE_BADGE=false
-SHOW_STATS=true
-VIDEO_LINK_MODE=player
-VIDEO_LINK_STYLE=plain
-```
-
-## Deploy
+Build Command:
 
 ```bash
 npm install
+```
+
+Start Command:
+
+```bash
 npm start
 ```
 
-Po wdrożeniu przetestuj wpis, który cytuje inny wpis. W logach zobaczysz jedną z informacji:
+## Ograniczenie Discorda
 
-```text
-Dociągnięto cytowany wpis przez FxTwitter: ...
-Znaleziono cytowany wpis przez syndication dla ...
-Brak cytowanego wpisu w danych dla ...
-```
+Natywnego playera video nie można umieścić wewnątrz własnego embeda bota. Dla wpisów video bot wysyła jedną wiadomość z tekstem, kontekstem cytatu i linkiem FxTwitter generującym player.

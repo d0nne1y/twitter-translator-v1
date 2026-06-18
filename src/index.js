@@ -565,8 +565,8 @@ async function bufferFromUrl(url, limitBytes) {
   return downloadLimited(url, limitBytes);
 }
 
-async function buildPhotoCollage(tweet) {
-  const photos = tweet.media.photos.slice(0, 4);
+async function buildPhotoCollageBuffer(tweet) {
+  const photos = tweet?.media?.photos?.slice(0, 4) || [];
   if (!photos.length) return null;
 
   const size = photos.length === 1 ? 900 : 448;
@@ -590,14 +590,62 @@ async function buildPhotoCollage(tweet) {
     });
   }
 
-  const out = await sharp({
+  return sharp({
     create: { width, height, channels: 3, background: { r: 18, g: 18, b: 18 } }
   }).composite(composites).jpeg({ quality: 90 }).toBuffer();
-
-  return new AttachmentBuilder(out, { name: safeFilename(`tweet-${tweet.id}-gallery.jpg`) });
 }
 
-function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = null, note = '') {
+async function buildPhotoCollage(tweet, filenamePrefix = 'tweet') {
+  const out = await buildPhotoCollageBuffer(tweet);
+  if (!out) return null;
+  return new AttachmentBuilder(out, { name: safeFilename(`${filenamePrefix}-${tweet.id}-gallery.jpg`) });
+}
+
+async function stackCollages(topBuffer, bottomBuffer) {
+  if (!topBuffer) return bottomBuffer;
+  if (!bottomBuffer) return topBuffer;
+
+  const targetWidth = 900;
+  const gap = 18;
+
+  const top = await sharp(topBuffer)
+    .resize({ width: targetWidth, fit: 'inside', withoutEnlargement: false })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  const bottom = await sharp(bottomBuffer)
+    .resize({ width: targetWidth, fit: 'inside', withoutEnlargement: false })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+
+  const topMeta = await sharp(top).metadata();
+  const bottomMeta = await sharp(bottom).metadata();
+  const width = Math.max(topMeta.width || targetWidth, bottomMeta.width || targetWidth);
+  const height = (topMeta.height || 0) + gap + (bottomMeta.height || 0);
+
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 18, g: 18, b: 18 } }
+  }).composite([
+    { input: top, left: Math.floor((width - (topMeta.width || width)) / 2), top: 0 },
+    { input: bottom, left: Math.floor((width - (bottomMeta.width || width)) / 2), top: (topMeta.height || 0) + gap }
+  ]).jpeg({ quality: 90 }).toBuffer();
+}
+
+async function buildCombinedMediaAttachment(tweet, quoted) {
+  const mainHasPhotos = Boolean(tweet?.media?.photos?.length);
+  const quoteHasPhotos = Boolean(quoted?.media?.photos?.length);
+  if (!mainHasPhotos && !quoteHasPhotos) return null;
+
+  const mainBuffer = mainHasPhotos ? await buildPhotoCollageBuffer(tweet) : null;
+  const quoteBuffer = quoteHasPhotos ? await buildPhotoCollageBuffer(quoted) : null;
+  const out = await stackCollages(mainBuffer, quoteBuffer);
+  if (!out) return null;
+
+  return new AttachmentBuilder(out, {
+    name: safeFilename(`tweet-${tweet.id}-combined-gallery.jpg`)
+  });
+}
+
+function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = null, note = '', quotedContext = null) {
   const meta = buildMetaLine(tweet, didTranslate);
   const description = [
     meta ? `*${meta}*` : '',
@@ -607,33 +655,28 @@ function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = n
 
   const e = new EmbedBuilder()
     .setColor(didTranslate ? 0x00B7FF : 0x5865F2)
-    .setAuthor({ name: authorLabel(tweet), iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
+    .setAuthor({
+      name: authorLabel(tweet),
+      iconURL: tweet.authorAvatar || undefined,
+      url: xUrl(tweet.authorUser || tweet.user, tweet.id)
+    })
     .setDescription(description);
+
+  if (quotedContext) {
+    e.addFields({
+      name: '↪ Cytowany wpis',
+      value: quotedContext.fieldValue
+    });
+  }
 
   if (SHOW_FOOTER) e.setFooter({ text: didTranslate ? 'Przetłumaczono automatycznie' : 'Bez tłumaczenia' });
   if (imageAttachmentName) e.setImage(`attachment://${imageAttachmentName}`);
   return e;
 }
 
-async function buildQuotedPayload(quoted) {
-  if (!quoted) return { embeds: [], files: [] };
+async function buildQuotedContext(quoted) {
+  if (!quoted) return null;
 
-  const files = [];
-  let imageAttachmentName = null;
-
-  if (quoted.media?.photos?.length) {
-    try {
-      const collage = await buildPhotoCollage(quoted);
-      if (collage) {
-        files.push(collage);
-        imageAttachmentName = collage.name;
-      }
-    } catch (e) {
-      console.warn('Nie udało się zrobić galerii cytowanego wpisu:', e.message);
-    }
-  }
-
-  const stats = buildStatsLine(quoted);
   const shouldTranslateQuote = Boolean(quoted.text) && !IGNORE_LANGS.includes((quoted.lang || '').toLowerCase());
   let quotedDisplayText = quoted.text || 'Brak tekstu w cytowanym wpisie.';
   if (shouldTranslateQuote) {
@@ -643,77 +686,94 @@ async function buildQuotedPayload(quoted) {
       console.warn('Nie udało się przetłumaczyć cytowanego wpisu:', e.message);
     }
   }
-  const quotedText = prettyText(truncate(quotedDisplayText, 650));
-  const description = [stats ? `*${stats}*` : '', quotedText].filter(Boolean).join('\n\n');
 
-  const embed = new EmbedBuilder()
-    .setColor(0x2B2D31)
-    .setAuthor({
-      name: `↪ ${authorLabel(quoted)}`,
-      iconURL: quoted.authorAvatar || undefined,
-      url: quoted.id && quoted.id !== 'quoted' ? xUrl(quoted.authorUser || quoted.user, quoted.id) : undefined
-    })
-    .setDescription(description);
-
-  if (imageAttachmentName) embed.setImage(`attachment://${imageAttachmentName}`);
-  else if (quoted.media?.photos?.[0]) embed.setImage(quoted.media.photos[0]);
+  const quoteUrl = quoted.id && quoted.id !== 'quoted'
+    ? xUrl(quoted.authorUser || quoted.user, quoted.id)
+    : null;
+  const author = quoteUrl
+    ? `**[${authorLabel(quoted)}](${quoteUrl})**`
+    : `**${authorLabel(quoted)}**`;
+  const stats = buildStatsLine(quoted);
+  const lines = [author];
+  if (stats) lines.push(`*${stats}*`);
+  lines.push('', prettyText(truncate(quotedDisplayText, 650)));
 
   if (quoted.media?.video && quoted.authorUser && quoted.id && quoted.id !== 'quoted') {
-    embed.addFields({ name: '🎥 Cytowany wpis ma video', value: fxUrl(quoted.authorUser, quoted.id) });
+    lines.push('', `[🎥 Otwórz film z cytowanego wpisu](${fxUrl(quoted.authorUser, quoted.id)})`);
   }
 
-  return { embeds: [embed], files };
+  return {
+    fieldValue: truncate(lines.join('\n'), 1024),
+    plainText: truncate([
+      `**↪ Cytowany wpis — ${authorLabel(quoted)}**`,
+      stats ? `*${stats}*` : '',
+      '',
+      prettyText(quotedDisplayText),
+      quoted.media?.video && quoted.authorUser && quoted.id && quoted.id !== 'quoted'
+        ? `\n🎥 ${fxUrl(quoted.authorUser, quoted.id)}`
+        : ''
+    ].filter(Boolean).join('\n'), 850)
+  };
 }
 
 async function sendTweetMessage(message, tweet, translated, didTranslate, fx, originalX, summary = '') {
   const hasVideo = Boolean(tweet.media.video);
   const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
-  const quotedPayload = await buildQuotedPayload(tweet.quoted);
+  const quotedContext = await buildQuotedContext(tweet.quoted);
 
-  // VIDEO: jedna wiadomość bez dodatkowego embeda.
-  // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
-  // dostajesz jeden wpis bota: tłumaczenie na górze i odtwarzalny player pod spodem.
+  // VIDEO: jedna wiadomość bota. Kontekst cytowanego wpisu jest dopisany nad playerem,
+  // zamiast wysyłania drugiego embeda pod spodem.
   if (hasVideo) {
-    // VIDEO v28: ultra-clean. Bez autora i bez etykiety "Odtwarzacz wpisu".
-    // Autor, statystyki i player są już widoczne w karcie FxTwitter, więc tutaj zostawiamy tylko tekst + link.
     const bodyParts = [];
     if (summary) bodyParts.push(`**W skrócie:** ${truncate(summary, 180)}`, '');
-    bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 1000)));
+    bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 900)));
+    if (quotedContext) bodyParts.push('', '────────────', '', quotedContext.plainText);
 
-    // Link FxTwitter musi być jawny jako osobna linia, żeby Discord stabilnie wyrenderował player.
     const playerLink = VIDEO_LINK_STYLE === 'spoiler' ? `||${fx}||` : fx;
+    const content = [bodyParts.join('\n'), '', playerLink].join('\n');
 
-    const content = [
-      bodyParts.join('\n'),
+    return message.channel.send({
+      content: truncate(content, 1900),
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  // ZDJĘCIA / TEKST: główny wpis i cytowany wpis są jednym embedem.
+  // Jeżeli oba mają zdjęcia, galerie są składane pionowo w jeden obraz.
+  let mediaAttachment = null;
+  try {
+    mediaAttachment = await buildCombinedMediaAttachment(tweet, tweet.quoted);
+  } catch (e) {
+    console.warn('Nie udało się zbudować wspólnej galerii wpisu i cytatu:', e.message);
+  }
+
+  const displayText = summary
+    ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}`
+    : translated;
+
+  if (mediaAttachment) {
+    const embed = buildMainEmbed(
+      tweet,
+      displayText,
+      didTranslate,
+      mediaAttachment.name,
       '',
-      playerLink
-    ].join('\n');
-
-    const sent = await message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
-    if (quotedPayload.embeds.length) await message.channel.send({ embeds: quotedPayload.embeds, files: quotedPayload.files, allowedMentions: { parse: [] } });
-    return sent;
+      quotedContext
+    );
+    return message.channel.send({
+      embeds: [embed],
+      files: [mediaAttachment],
+      allowedMentions: { parse: [] }
+    });
   }
 
-  // ZDJĘCIA: jedna skondensowana galeria 1/2/4 w jednym embedzie.
-  if (hasPhotos) {
-    try {
-      const collage = await buildPhotoCollage(tweet);
-      if (collage) {
-        const embed = buildMainEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate, collage.name);
-        return await message.channel.send({ embeds: [embed, ...quotedPayload.embeds], files: [collage, ...quotedPayload.files], allowedMentions: { parse: [] } });
-      }
-    } catch (e) {
-      console.warn('Nie udało się zrobić galerii zdjęć, fallback do pierwszego zdjęcia:', e.message);
-    }
+  // Fallback: nawet gdy nie uda się pobrać zdjęć, cytat nadal jest częścią tego samego embeda.
+  const embed = buildMainEmbed(tweet, displayText, didTranslate, null, '', quotedContext);
+  if (hasPhotos && tweet.media.photos[0]) embed.setImage(tweet.media.photos[0]);
+  else if (tweet.quoted?.media?.photos?.[0]) embed.setImage(tweet.quoted.media.photos[0]);
 
-    const embed = buildFallbackEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate, tweet.media.photos[0], 'Nie udało się złożyć galerii, więc pokazuję pierwsze zdjęcie.');
-    return message.channel.send({ embeds: [embed, ...quotedPayload.embeds], files: quotedPayload.files, allowedMentions: { parse: [] } });
-  }
-
-  const embed = buildMainEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate);
   return message.channel.send({
-    embeds: [embed, ...quotedPayload.embeds],
-    files: quotedPayload.files,
+    embeds: [embed],
     allowedMentions: { parse: [] }
   });
 }
@@ -722,7 +782,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v34 quoted context fixed, DeepL -> Google fallback`);
+  console.log(`Tryb mediów: v35 single-embed quotes, DeepL -> Google fallback`);
 });
 
 client.on('messageCreate', async message => {
