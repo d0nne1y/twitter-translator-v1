@@ -1,7 +1,7 @@
 {
   "name": "twitter-translator-discord-bot",
-  "version": "1.0.1",
-  "description": "Discord bot: X/Twitter translator with quoted tweet support, compact photo gallery and clean video layout",
+  "version": "1.0.2",
+  "description": "Discord bot: X/Twitter translator with DeepL/Google translator, compact photo gallery and clean video layout",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

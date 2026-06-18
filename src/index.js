@@ -15,11 +15,7 @@ const VIDEO_LINK_MODE = (process.env.VIDEO_LINK_MODE || 'player').toLowerCase();
 const VIDEO_LINK_STYLE = (process.env.VIDEO_LINK_STYLE || 'labeled').toLowerCase(); // labeled | plain | spoiler
 const SHOW_LANGUAGE_BADGE = String(process.env.SHOW_LANGUAGE_BADGE || 'false').toLowerCase() === 'true';
 const SHOW_FOOTER = String(process.env.SHOW_FOOTER || 'false').toLowerCase() === 'true';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const TRANSLATOR_PROVIDER = (process.env.TRANSLATOR_PROVIDER || 'auto').toLowerCase(); // auto | openai | deepl | google
 const SHOW_STATS = String(process.env.SHOW_STATS || 'true').toLowerCase() === 'true';
-const SHOW_SUMMARY = String(process.env.SHOW_SUMMARY || 'false').toLowerCase() === 'true';
 
 if (!DISCORD_TOKEN) {
   console.error('Brak DISCORD_TOKEN w Environment Variables.');
@@ -369,28 +365,6 @@ function guessLang(text) {
   return 'auto';
 }
 
-async function callOpenAI(messages, temperature = 0.2) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ model: OPENAI_MODEL, temperature, messages })
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
-  return json.choices?.[0]?.message?.content?.trim() || '';
-}
-
-async function translateWithOpenAI(text, from, to) {
-  if (!OPENAI_API_KEY) throw new Error('Brak OPENAI_API_KEY');
-  return callOpenAI([
-    { role: 'system', content: 'Jesteś świetnym tłumaczem wpisów z X/Twittera na naturalny polski. Tłumacz sens, slang, ironię i kontekst piłkarski. Nie dodawaj komentarzy ani objaśnień. Zachowaj nazwy własne, emoji, liczby i ton wypowiedzi. Nie cenzuruj wulgaryzmów, tylko oddaj je naturalnie po polsku.' },
-    { role: 'user', content: `Przetłumacz ten wpis z języka ${from || 'auto'} na ${to}. Zwróć wyłącznie tłumaczenie:\n\n${text}` }
-  ], 0.15);
-}
-
 async function translateWithDeepL(text, from, to) {
   if (!DEEPL_API_KEY) throw new Error('Brak DEEPL_API_KEY');
   const host = DEEPL_API_KEY.endsWith(':fx') ? 'https://api-free.deepl.com/v2/translate' : 'https://api.deepl.com/v2/translate';
@@ -413,35 +387,30 @@ async function translateWithGoogle(text, from, to) {
 
 async function translateText(text, from, to) {
   if (!text) return '';
-  const providers = [];
-  if (TRANSLATOR_PROVIDER === 'openai' || TRANSLATOR_PROVIDER === 'gpt') providers.push('openai');
-  else if (TRANSLATOR_PROVIDER === 'deepl') providers.push('deepl');
-  else if (TRANSLATOR_PROVIDER === 'google') providers.push('google');
-  else providers.push('openai', 'deepl', 'google');
 
-  for (const provider of providers) {
+  if (DEEPL_API_KEY) {
     try {
-      if (provider === 'openai' && OPENAI_API_KEY) return await translateWithOpenAI(text, from, to);
-      if (provider === 'deepl' && DEEPL_API_KEY) return await translateWithDeepL(text, from, to);
-      if (provider === 'google') return await translateWithGoogle(text, from, to);
+      const out = await translateWithDeepL(text, from, to);
+      console.log('DeepL OK');
+      return out;
     } catch (e) {
-      console.warn(`${provider} fallback:`, e.message);
+      console.warn('DeepL failed, fallback Google:', e.message);
     }
   }
+
+  try {
+    const out = await translateWithGoogle(text, from, to);
+    console.log('Google Translate OK');
+    return out;
+  } catch (e) {
+    console.warn('Google Translate failed, showing original:', e.message);
+  }
+
   return text;
 }
 
-async function maybeSummarize(text) {
-  if (!SHOW_SUMMARY || !OPENAI_API_KEY || !text || text.length < 220) return '';
-  try {
-    return await callOpenAI([
-      { role: 'system', content: 'Streszczaj tweety po polsku w jednym krótkim, naturalnym zdaniu. Bez komentarzy.' },
-      { role: 'user', content: text }
-    ], 0.2);
-  } catch (e) {
-    console.warn('summary fallback:', e.message);
-    return '';
-  }
+async function maybeSummarize() {
+  return '';
 }
 
 function buildNativeContent(tweet, translated, didTranslate, fx, hasVideo) {
@@ -640,7 +609,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v31 quoted tweets syndication fallback + video minimal + pro photo UI`);
+  console.log(`Tryb mediów: v33 no OpenAI, DeepL -> Google fallback`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 

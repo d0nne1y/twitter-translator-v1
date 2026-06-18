@@ -1,8 +1,50 @@
-# Twitter Translator v31 - quoted syndication fallback
+# Twitter Translator v33 — bez OpenAI
 
-Zmiany względem v30:
-- cytowane tweety są wykrywane nie tylko z obiektu/URL, ale też po ID,
-- dodatkowy fallback przez `cdn.syndication.twimg.com/tweet-result`,
-- logi informują, czy cytowany wpis został znaleziony.
+Wersja usuwa całkowicie OpenAI z kodu. Tłumaczenie działa w kolejności:
 
-Wgraj na GitHuba, zrób commit i Render redeploy.
+1. DeepL, jeśli ustawisz `DEEPL_API_KEY`
+2. Google Translate jako fallback
+3. Jeśli oba padną, bot pokazuje oryginalny tekst
+
+## Render — zmienne, które zostawić
+
+```env
+DISCORD_TOKEN=...
+DEEPL_API_KEY=...
+TARGET_LANG=pl
+IGNORE_LANGS=en,pl
+DELETE_ORIGINAL_MESSAGE=true
+PHOTO_UPLOAD_LIMIT_MB=8
+SHOW_FOOTER=false
+SHOW_LANGUAGE_BADGE=false
+SHOW_STATS=true
+VIDEO_LINK_MODE=player
+VIDEO_LINK_STYLE=plain
+```
+
+## Render — zmienne, które można usunąć
+
+```env
+OPENAI_API_KEY
+OPENAI_MODEL
+TRANSLATOR_PROVIDER
+SHOW_SUMMARY
+SUPPRESS_ORIGINAL_EMBED
+MAX_VIDEO_UPLOAD_MB
+UPLOAD_VIDEO_ATTACHMENT
+VIDEO_FALLBACK_LINK_MODE
+```
+
+## Deploy
+
+Build Command:
+
+```bash
+npm install
+```
+
+Start Command:
+
+```bash
+npm start
+```
