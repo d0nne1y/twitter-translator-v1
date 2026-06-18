@@ -229,10 +229,9 @@ function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = n
     .setTitle(didTranslate ? `🌍 ${langLabel(tweet.lang)} → PL` : `${langLabel(tweet.lang)} · bez tłumaczenia`)
     .setDescription([
       truncate(translated || 'Brak tekstu.', 950),
-      didTranslate && tweet.text ? `**Oryginał**\n${truncate(tweet.text, 520)}` : '',
       note
     ].filter(Boolean).join('\n\n'))
-    .setFooter({ text: `Tweet ID: ${tweet.id} · ${didTranslate ? 'auto' : 'oryginał'}` });
+    .setFooter({ text: didTranslate ? 'Automatyczne tłumaczenie' : 'Bez tłumaczenia' });
   if (imageAttachmentName) e.setImage(`attachment://${imageAttachmentName}`);
   return e;
 }
@@ -244,7 +243,7 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
 
   // VIDEO: najczyściej = najpierw przetłumaczony wpis, potem player FxTwitter pod spodem.
   if (hasVideo) {
-    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo poniżej.**');
+    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo pojawi się poniżej wpisu.**');
     await message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
     // Druga wiadomość jest celowa: wtedy Discord renderuje odtwarzacz FxTwitter POD przetłumaczonym wpisem.
     if (VIDEO_LINK_MODE === 'player') {
