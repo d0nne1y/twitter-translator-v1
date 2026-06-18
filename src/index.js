@@ -149,7 +149,7 @@ function buildFallbackEmbed(tweet, translated, didTranslate, imageUrl=null, note
     .setColor(didTranslate ? 0x00AEEF : 0x5865F2)
     .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined, url: xUrl(tweet.authorUser || tweet.user, tweet.id) })
     .setDescription([truncate(translated || 'Brak tekstu.', 1200), note].filter(Boolean).join('\n\n'))
-    .setFooter({ text: didTranslate ? 'Automatyczne tłumaczenie' : 'Bez tłumaczenia' });
+    // Stopka celowo wyłączona dla czystszego wyglądu.
   if (imageUrl) e.setImage(imageUrl);
   return e;
 }
@@ -222,7 +222,8 @@ function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = n
       truncate(translated || 'Brak tekstu.', 950),
       note
     ].filter(Boolean).join('\n\n'))
-    .setFooter({ text: didTranslate ? 'Automatyczne tłumaczenie' : 'Bez tłumaczenia' });
+    // Bez stopki typu 'Automatyczne tłumaczenie' — czystszy wygląd.
+    ;
   if (imageAttachmentName) e.setImage(`attachment://${imageAttachmentName}`);
   return e;
 }
@@ -237,16 +238,12 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   if (hasVideo) {
     const header = `**[${tweet.authorName} (@${tweet.authorUser})](${originalX})**`;
     const body = truncate(translated || 'Brak tekstu.', 900);
-    const label = didTranslate ? '*Automatyczne tłumaczenie*' : '*Bez tłumaczenia*';
-
-    // Najstabilniejszy układ video: krótki tekst + jawny link FxTwitter.
-    // Link musi być widoczny, żeby Discord wyrenderował odtwarzacz video pod wiadomością.
+    // Najstabilniejszy układ video: tekst + jawny link FxTwitter.
+    // Uwaga: jeśli link będzie ukryty jako markdown [autor](url), Discord NIE wyrenderuje playera.
     const content = [
       header,
       '',
       body,
-      '',
-      label,
       '',
       fx
     ].join('\n');
@@ -278,7 +275,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v21 clean linked author - compact photos, cleaner video with FxTwitter player`);
+  console.log(`Tryb mediów: v22 clean no labels - linked author, compact photos, video player fallback`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
