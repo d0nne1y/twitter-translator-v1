@@ -1,32 +1,37 @@
-# Twitter Translator v35 — cytowany wpis w jednym embedzie
+# Twitter Translator v36 — wideo/GIF w jednym kontenerze
 
-Ta wersja łączy główny wpis i cytowany wpis w **jeden embed Discorda**.
+Ta wersja korzysta z **Discord Components V2**. Dla wpisów z wideo lub GIF-em bot próbuje wysłać jedną wizualną kartę zawierającą:
 
-## Co zmieniono
+- autora i statystyki,
+- przetłumaczony tekst,
+- cytowany wpis (jeżeli występuje),
+- odtwarzalne wideo/GIF w tej samej karcie.
 
-- cytowany wpis jest sekcją `↪ Cytowany wpis` wewnątrz głównego embeda,
-- nie powstaje już drugi embed pod głównym wpisem,
-- gdy główny i cytowany wpis mają zdjęcia, bot składa je pionowo w jeden obraz,
-- gdy tylko cytowany wpis ma zdjęcia, jego galeria pojawia się jako obraz głównego embeda,
-- przy wpisach z video kontekst cytatu jest dopisywany w tej samej wiadomości nad playerem FxTwitter,
-- tłumaczenie nadal działa: DeepL → Google Translate → oryginalny tekst.
+Wpisy ze zdjęciami pozostają w dotychczasowym układzie z galerią.
 
-## Render
+## Wdrożenie
 
-Nie musisz zmieniać zmiennych środowiskowych. Zostaw obecne ustawienia.
+1. Nadpisz pliki w repozytorium zawartością tej paczki.
+2. Zrób commit.
+3. Render uruchomi deploy. Build: `npm install`, start: `npm start`.
+4. Dodaj na Renderze:
 
-Build Command:
-
-```bash
-npm install
+```env
+VIDEO_RENDER_MODE=components_v2
 ```
 
-Start Command:
+Pozostałe zmienne zostają bez zmian.
 
-```bash
-npm start
+## Tryb awaryjny
+
+Jeżeli na Twoim Discordzie bezpośrednie MP4 z X nie załaduje się w galerii, bot automatycznie użyje starego playera FxTwitter. Możesz również wymusić stary tryb:
+
+```env
+VIDEO_RENDER_MODE=fx
 ```
 
-## Ograniczenie Discorda
+## Wymagania
 
-Natywnego playera video nie można umieścić wewnątrz własnego embeda bota. Dla wpisów video bot wysyła jedną wiadomość z tekstem, kontekstem cytatu i linkiem FxTwitter generującym player.
+- Node.js 20+
+- discord.js 14.22.1+
+- bot z uprawnieniami do wysyłania wiadomości i osadzania linków

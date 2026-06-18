@@ -1,6 +1,10 @@
 import http from 'node:http';
 import { Buffer } from 'node:buffer';
-import { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import {
+  Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder,
+  ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder,
+  SeparatorBuilder, SeparatorSpacingSize, MessageFlags
+} from 'discord.js';
 import sharp from 'sharp';
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -16,6 +20,7 @@ const VIDEO_LINK_STYLE = (process.env.VIDEO_LINK_STYLE || 'labeled').toLowerCase
 const SHOW_LANGUAGE_BADGE = String(process.env.SHOW_LANGUAGE_BADGE || 'false').toLowerCase() === 'true';
 const SHOW_FOOTER = String(process.env.SHOW_FOOTER || 'false').toLowerCase() === 'true';
 const SHOW_STATS = String(process.env.SHOW_STATS || 'true').toLowerCase() === 'true';
+const VIDEO_RENDER_MODE = (process.env.VIDEO_RENDER_MODE || 'components_v2').toLowerCase(); // components_v2 | fx
 
 if (!DISCORD_TOKEN) {
   console.error('Brak DISCORD_TOKEN w Environment Variables.');
@@ -716,26 +721,118 @@ async function buildQuotedContext(quoted) {
   };
 }
 
+
+function pickBestVideoUrl(video) {
+  if (!video) return null;
+  const variants = Array.isArray(video.variants) ? [...video.variants] : [];
+  const usable = variants
+    .filter(v => v?.url && /^https:\/\//i.test(v.url))
+    .sort((a, b) => Number(b.bitrate || 0) - Number(a.bitrate || 0));
+  return usable[0]?.url || video.url || null;
+}
+
+function buildComponentStats(tweet) {
+  const stats = buildStatsLine(tweet);
+  return stats ? `-# ${stats}` : '';
+}
+
+function buildVideoMainText(tweet, translated, didTranslate) {
+  const authorUrl = xUrl(tweet.authorUser || tweet.user, tweet.id);
+  const lines = [
+    `**[${authorLabel(tweet)}](${authorUrl})**`,
+    buildComponentStats(tweet),
+    '',
+    prettyText(truncate(translated || 'Brak tekstu.', 1300))
+  ].filter(Boolean);
+  return truncate(lines.join('\n'), 1800);
+}
+
+function buildVideoQuoteText(quotedContext) {
+  if (!quotedContext) return '';
+  return truncate(quotedContext.plainText, 1200);
+}
+
+async function sendComponentsV2Video(message, tweet, translated, didTranslate, quotedContext) {
+  const container = new ContainerBuilder()
+    .setAccentColor(didTranslate ? 0x00B7FF : 0x5865F2)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(buildVideoMainText(tweet, translated, didTranslate))
+    );
+
+  if (quotedContext) {
+    container
+      .addSeparatorComponents(
+        new SeparatorBuilder()
+          .setDivider(true)
+          .setSpacing(SeparatorSpacingSize.Small)
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(buildVideoQuoteText(quotedContext))
+      );
+  }
+
+  const galleryItems = [];
+  const mainVideoUrl = pickBestVideoUrl(tweet.media?.video);
+  if (mainVideoUrl) {
+    galleryItems.push(
+      new MediaGalleryItemBuilder()
+        .setURL(mainVideoUrl)
+        .setDescription(`Wideo z wpisu ${authorLabel(tweet)}`)
+    );
+  }
+
+  const quotedVideoUrl = pickBestVideoUrl(tweet.quoted?.media?.video);
+  if (quotedVideoUrl && quotedVideoUrl !== mainVideoUrl) {
+    galleryItems.push(
+      new MediaGalleryItemBuilder()
+        .setURL(quotedVideoUrl)
+        .setDescription(`Wideo z cytowanego wpisu ${authorLabel(tweet.quoted)}`)
+    );
+  }
+
+  if (!galleryItems.length) throw new Error('Brak bezpośredniego URL wideo dla Components V2');
+
+  container.addMediaGalleryComponents(
+    new MediaGalleryBuilder().addItems(...galleryItems)
+  );
+
+  return message.channel.send({
+    components: [container],
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] }
+  });
+}
+
+async function sendFxVideoFallback(message, tweet, translated, quotedContext, fx, summary = '') {
+  const bodyParts = [];
+  if (summary) bodyParts.push(`**W skrócie:** ${truncate(summary, 180)}`, '');
+  bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 900)));
+  if (quotedContext) bodyParts.push('', '────────────', '', quotedContext.plainText);
+  const playerLink = VIDEO_LINK_STYLE === 'spoiler' ? `||${fx}||` : fx;
+  const content = [bodyParts.join('\n'), '', playerLink].join('\n');
+  return message.channel.send({
+    content: truncate(content, 1900),
+    allowedMentions: { parse: [] }
+  });
+}
+
 async function sendTweetMessage(message, tweet, translated, didTranslate, fx, originalX, summary = '') {
-  const hasVideo = Boolean(tweet.media.video);
+  const hasVideo = Boolean(tweet.media.video || tweet.quoted?.media?.video);
   const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
   const quotedContext = await buildQuotedContext(tweet.quoted);
 
-  // VIDEO: jedna wiadomość bota. Kontekst cytowanego wpisu jest dopisany nad playerem,
-  // zamiast wysyłania drugiego embeda pod spodem.
+  // VIDEO/GIF: Components V2 pozwala umieścić tekst i zewnętrzne wideo
+  // wewnątrz jednego wizualnego kontenera. Jeśli Discord odrzuci bezpośredni
+  // adres MP4, automatycznie wracamy do stabilnego playera FxTwitter.
   if (hasVideo) {
-    const bodyParts = [];
-    if (summary) bodyParts.push(`**W skrócie:** ${truncate(summary, 180)}`, '');
-    bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 900)));
-    if (quotedContext) bodyParts.push('', '────────────', '', quotedContext.plainText);
-
-    const playerLink = VIDEO_LINK_STYLE === 'spoiler' ? `||${fx}||` : fx;
-    const content = [bodyParts.join('\n'), '', playerLink].join('\n');
-
-    return message.channel.send({
-      content: truncate(content, 1900),
-      allowedMentions: { parse: [] }
-    });
+    if (VIDEO_RENDER_MODE === 'components_v2') {
+      try {
+        return await sendComponentsV2Video(message, tweet, translated, didTranslate, quotedContext);
+      } catch (e) {
+        console.warn('Components V2 video failed, fallback FxTwitter:', e.message);
+      }
+    }
+    return sendFxVideoFallback(message, tweet, translated, quotedContext, fx, summary);
   }
 
   // ZDJĘCIA / TEKST: główny wpis i cytowany wpis są jednym embedem.
@@ -782,7 +879,8 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v35 single-embed quotes, DeepL -> Google fallback`);
+  console.log(`Tryb mediów: v36 Components V2 video + single-embed quotes, DeepL -> Google fallback`);
+  console.log(`Renderowanie wideo: ${VIDEO_RENDER_MODE}`);
 });
 
 client.on('messageCreate', async message => {
