@@ -1,14 +1,15 @@
-# Twitter Translator v41 — poprawione hiperłącza autorów
+# Twitter Translator v42 — czyste klikalne nazwy autorów
 
-Ta wersja naprawia przypadek, w którym Discord pokazywał surowy adres X pod nickiem autora zamiast robić z nicku klikalne hiperłącze.
+Ta wersja naprawia literalne wyświetlanie składni Markdown i usuwa `@handle` z nagłówków.
 
 ## Zmiany
 
-- autor głównego wpisu jest klikalnym linkiem do oryginalnego posta,
-- autor cytowanego wpisu również jest klikalny,
-- surowy URL nie powinien już pojawiać się pod nickiem,
-- bez zmian w układzie zdjęć, filmów, GIF-ów i cytowanych wpisów,
-- media nadal są przypisane do właściwego wpisu.
+- wyświetlana jest tylko nazwa autora, bez `(@handle)`,
+- nazwa autora jest hiperłączem do konkretnego wpisu na X,
+- surowy adres X nie pojawia się jako osobna linia,
+- poprawiona składnia linku Markdown w Discord Components V2,
+- działa dla wpisu głównego i cytowanego,
+- zdjęcia, GIF-y, filmy i kolejność mediów pozostają bez zmian.
 
 ## Wdrożenie
 

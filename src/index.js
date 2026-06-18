@@ -80,7 +80,10 @@ function prettyText(text='') {
     .replace(/[ \t]+\n/g, '\n')
     .trim();
 }
-function authorLabel(tweet) { return `${tweet.authorName} (@${tweet.authorUser})`; }
+function authorDisplayName(tweet) {
+  return String(tweet?.authorName || tweet?.authorUser || 'Nieznany autor').trim();
+}
+function authorLabel(tweet) { return authorDisplayName(tweet); }
 function escapeMarkdownText(value='') {
   return String(value)
     .replace(/\\/g, '\\\\')
@@ -88,9 +91,8 @@ function escapeMarkdownText(value='') {
 }
 function maskedLink(label, url) {
   if (!url) return escapeMarkdownText(label);
-  // Kątowniki wokół URL zapobiegają sytuacji, w której Discord pokazuje
-  // surowy adres pod nickiem zamiast prawidłowego hiperłącza.
-  return `[${escapeMarkdownText(label)}](<${url}>)`;
+  // Klasyczna składnia Markdown: klikany tekst, bez pokazywania surowego URL.
+  return `[${escapeMarkdownText(label)}](${url})`;
 }
 function langBadge(tweet, didTranslate) {
   if (!SHOW_LANGUAGE_BADGE) return '';
