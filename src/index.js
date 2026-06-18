@@ -749,7 +749,40 @@ function buildVideoMainText(tweet, translated, didTranslate) {
 
 function buildVideoQuoteText(quotedContext) {
   if (!quotedContext) return '';
-  return truncate(quotedContext.plainText, 1200);
+  // W Components V2 media są renderowane bezpośrednio pod cytowanym tekstem,
+  // więc usuwamy awaryjny link do FxTwitter z samej sekcji tekstowej.
+  const clean = String(quotedContext.plainText || '')
+    .replace(/\n?🎥\s+https?:\/\/\S+/gi, '')
+    .trim();
+  return truncate(clean, 1200);
+}
+
+function buildComponentMediaGallery(tweet, labelPrefix = 'Media z wpisu') {
+  if (!tweet?.media) return null;
+
+  const items = [];
+  const videoUrl = pickBestVideoUrl(tweet.media.video);
+
+  // Wpis na X nie powinien mieszać filmu i zdjęć w jednej publikacji.
+  // Jeżeli jednak API zwróci oba typy, priorytet ma odtwarzalne wideo/GIF.
+  if (videoUrl) {
+    items.push(
+      new MediaGalleryItemBuilder()
+        .setURL(videoUrl)
+        .setDescription(`${labelPrefix}: ${authorLabel(tweet)}`)
+    );
+  } else {
+    for (const [index, photoUrl] of (tweet.media.photos || []).slice(0, 4).entries()) {
+      if (!photoUrl) continue;
+      items.push(
+        new MediaGalleryItemBuilder()
+          .setURL(photoUrl)
+          .setDescription(`${labelPrefix} — zdjęcie ${index + 1}: ${authorLabel(tweet)}`)
+      );
+    }
+  }
+
+  return items.length ? new MediaGalleryBuilder().addItems(...items) : null;
 }
 
 async function sendComponentsV2Video(message, tweet, translated, didTranslate, quotedContext) {
@@ -759,7 +792,14 @@ async function sendComponentsV2Video(message, tweet, translated, didTranslate, q
       new TextDisplayBuilder().setContent(buildVideoMainText(tweet, translated, didTranslate))
     );
 
-  if (quotedContext) {
+  // Najpierw media głównego wpisu — dokładnie pod jego tekstem.
+  const mainGallery = buildComponentMediaGallery(tweet, 'Media głównego wpisu');
+  if (mainGallery) {
+    container.addMediaGalleryComponents(mainGallery);
+  }
+
+  // Dopiero potem cytowany wpis i jego własne media.
+  if (quotedContext && tweet.quoted) {
     container
       .addSeparatorComponents(
         new SeparatorBuilder()
@@ -769,32 +809,16 @@ async function sendComponentsV2Video(message, tweet, translated, didTranslate, q
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(buildVideoQuoteText(quotedContext))
       );
+
+    const quotedGallery = buildComponentMediaGallery(tweet.quoted, 'Media cytowanego wpisu');
+    if (quotedGallery) {
+      container.addMediaGalleryComponents(quotedGallery);
+    }
   }
 
-  const galleryItems = [];
-  const mainVideoUrl = pickBestVideoUrl(tweet.media?.video);
-  if (mainVideoUrl) {
-    galleryItems.push(
-      new MediaGalleryItemBuilder()
-        .setURL(mainVideoUrl)
-        .setDescription(`Wideo z wpisu ${authorLabel(tweet)}`)
-    );
+  if (!mainGallery && !tweet.quoted?.media?.video && !(tweet.quoted?.media?.photos || []).length) {
+    throw new Error('Brak bezpośrednich mediów dla Components V2');
   }
-
-  const quotedVideoUrl = pickBestVideoUrl(tweet.quoted?.media?.video);
-  if (quotedVideoUrl && quotedVideoUrl !== mainVideoUrl) {
-    galleryItems.push(
-      new MediaGalleryItemBuilder()
-        .setURL(quotedVideoUrl)
-        .setDescription(`Wideo z cytowanego wpisu ${authorLabel(tweet.quoted)}`)
-    );
-  }
-
-  if (!galleryItems.length) throw new Error('Brak bezpośredniego URL wideo dla Components V2');
-
-  container.addMediaGalleryComponents(
-    new MediaGalleryBuilder().addItems(...galleryItems)
-  );
 
   return message.channel.send({
     components: [container],
