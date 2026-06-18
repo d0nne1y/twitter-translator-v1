@@ -1,0 +1,17 @@
+{
+  "name": "twitter-translator-discord-bot",
+  "version": "1.15.0",
+  "description": "Discord bot: X/Twitter translator with final media layout: compact photo gallery and video below tweet",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "sharp": "^0.33.5"
+  }
+}
