@@ -708,6 +708,7 @@ async function buildQuotedContext(quoted) {
   }
 
   return {
+    displayText: prettyText(quotedDisplayText),
     fieldValue: truncate(lines.join('\n'), 1024),
     plainText: truncate([
       `**↪ Cytowany wpis — ${authorLabel(quoted)}**`,
@@ -733,28 +734,45 @@ function pickBestVideoUrl(video) {
 
 function buildComponentStats(tweet) {
   const stats = buildStatsLine(tweet);
-  return stats ? `-# ${stats}` : '';
+  // Nie używamy już markdownowego "subtext" (-#), bo na desktopie i telefonie
+  // statystyki były zbyt małe. Zwykły pogrubiony wiersz jest czytelniejszy.
+  return stats ? `**${stats}**` : '';
 }
 
 function buildVideoMainText(tweet, translated, didTranslate) {
   const authorUrl = xUrl(tweet.authorUser || tweet.user, tweet.id);
-  const lines = [
-    `**[${authorLabel(tweet)}](${authorUrl})**`,
-    buildComponentStats(tweet),
-    '',
-    prettyText(truncate(translated || 'Brak tekstu.', 1300))
-  ].filter(Boolean);
-  return truncate(lines.join('\n'), 1800);
+  const header = `### [${authorLabel(tweet)}](${authorUrl})`;
+  const stats = buildComponentStats(tweet);
+  const body = prettyText(truncate(translated || 'Brak tekstu.', 1300));
+  const top = [header, stats].filter(Boolean).join('\n');
+
+  // Dwie nowe linie pomiędzy nagłówkiem/metadanymi a treścią wpisu dają
+  // więcej oddechu i poprawiają czytelność bez zmiany układu mediów.
+  return truncate(`${top}\n\n${body}`, 1800);
 }
 
-function buildVideoQuoteText(quotedContext) {
-  if (!quotedContext) return '';
-  // W Components V2 media są renderowane bezpośrednio pod cytowanym tekstem,
-  // więc usuwamy awaryjny link do FxTwitter z samej sekcji tekstowej.
-  const clean = String(quotedContext.plainText || '')
-    .replace(/\n?🎥\s+https?:\/\/\S+/gi, '')
-    .trim();
-  return truncate(clean, 1200);
+function buildVideoQuoteText(quoted, quotedContext) {
+  if (!quoted || !quotedContext) return '';
+
+  const quoteUrl = quoted.id && quoted.id !== 'quoted'
+    ? xUrl(quoted.authorUser || quoted.user, quoted.id)
+    : null;
+  const author = quoteUrl
+    ? `**[${authorLabel(quoted)}](${quoteUrl})**`
+    : `**${authorLabel(quoted)}**`;
+  const stats = buildComponentStats(quoted);
+  const body = prettyText(truncate(
+    quotedContext.displayText || quoted.text || 'Brak tekstu w cytowanym wpisie.',
+    850
+  ));
+
+  const top = [
+    '### ↪ Cytowany wpis',
+    author,
+    stats
+  ].filter(Boolean).join('\n');
+
+  return truncate(`${top}\n\n${body}`, 1400);
 }
 
 function buildComponentMediaGallery(tweet, labelPrefix = 'Media z wpisu') {
@@ -804,10 +822,10 @@ async function sendComponentsV2Video(message, tweet, translated, didTranslate, q
       .addSeparatorComponents(
         new SeparatorBuilder()
           .setDivider(true)
-          .setSpacing(SeparatorSpacingSize.Small)
+          .setSpacing(SeparatorSpacingSize.Large)
       )
       .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(buildVideoQuoteText(quotedContext))
+        new TextDisplayBuilder().setContent(buildVideoQuoteText(tweet.quoted, quotedContext))
       );
 
     const quotedGallery = buildComponentMediaGallery(tweet.quoted, 'Media cytowanego wpisu');
@@ -903,7 +921,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v36 Components V2 video + single-embed quotes, DeepL -> Google fallback`);
+  console.log(`Tryb mediów: v38 czytelne Components V2 + media przypisane do wpisów, DeepL -> Google fallback`);
   console.log(`Renderowanie wideo: ${VIDEO_RENDER_MODE}`);
 });
 
