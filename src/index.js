@@ -85,14 +85,28 @@ function authorDisplayName(tweet) {
 }
 function authorLabel(tweet) { return authorDisplayName(tweet); }
 function escapeMarkdownText(value='') {
+  // Escapujemy także # i !, bo nazwy kont często zawierają hashtagi.
+  // Bez tego Discord potrafił potraktować nazwę jako fragment nagłówka
+  // i wyświetlić dosłownie nawiasy oraz URL zamiast hiperłącza.
   return String(value)
     .replace(/\\/g, '\\\\')
-    .replace(/([\[\]()*_~`>])/g, '\\$1');
+    .replace(/([\[\]()*_~`>#!|])/g, '\\$1');
+}
+function normalizeHttpUrl(url='') {
+  try {
+    const parsed = new URL(String(url));
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 function maskedLink(label, url) {
-  if (!url) return escapeMarkdownText(label);
-  // Klasyczna składnia Markdown: klikany tekst, bez pokazywania surowego URL.
-  return `[${escapeMarkdownText(label)}](${url})`;
+  const safeUrl = normalizeHttpUrl(url);
+  if (!safeUrl) return escapeMarkdownText(label);
+  // Discord lepiej parsuje adres w nawiasach ostrych, szczególnie gdy handle
+  // zawiera podkreślenia albo nazwa autora ma znak #.
+  return `[${escapeMarkdownText(label)}](<${safeUrl}>)`;
 }
 function langBadge(tweet, didTranslate) {
   if (!SHOW_LANGUAGE_BADGE) return '';
@@ -100,8 +114,9 @@ function langBadge(tweet, didTranslate) {
 }
 function cleanText(t='') { return String(t).replace(/https?:\/\/\S+/g, '').trim(); }
 function truncate(t='', n=1000) { return t.length > n ? t.slice(0, n - 1) + '…' : t; }
-function fxUrl(user, id) { return `https://fxtwitter.com/${user}/status/${id}`; }
-function xUrl(user, id) { return `https://x.com/${user}/status/${id}`; }
+function cleanHandle(user='') { return String(user).trim().replace(/^@+/, ''); }
+function fxUrl(user, id) { return `https://fxtwitter.com/${encodeURIComponent(cleanHandle(user))}/status/${encodeURIComponent(String(id))}`; }
+function xUrl(user, id) { return `https://x.com/${encodeURIComponent(cleanHandle(user))}/status/${encodeURIComponent(String(id))}`; }
 function safeFilename(s='file') { return String(s).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80); }
 
 function parseTweetRefFromUrl(url='') {
@@ -950,7 +965,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v40 czytelne Components V2 dla zdjęć, GIF-ów i filmów, DeepL -> Google fallback`);
+  console.log(`Tryb mediów: v43 poprawione hiperłącza autorów dla zdjęć, GIF-ów i filmów`);
   console.log(`Renderowanie wideo: ${VIDEO_RENDER_MODE}`);
 });
 

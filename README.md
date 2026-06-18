@@ -1,25 +1,23 @@
-# Twitter Translator v42 — czyste klikalne nazwy autorów
+# Twitter Translator v43 — poprawione linki autorów
 
-Ta wersja naprawia literalne wyświetlanie składni Markdown i usuwa `@handle` z nagłówków.
+Ta wersja naprawia przypadki, w których przy wpisach ze zdjęciami Discord pokazywał:
 
-## Zmiany
+```text
+[Nazwa autora]
+(https://x.com/...)
+```
 
-- wyświetlana jest tylko nazwa autora, bez `(@handle)`,
-- nazwa autora jest hiperłączem do konkretnego wpisu na X,
-- surowy adres X nie pojawia się jako osobna linia,
-- poprawiona składnia linku Markdown w Discord Components V2,
-- działa dla wpisu głównego i cytowanego,
-- zdjęcia, GIF-y, filmy i kolejność mediów pozostają bez zmian.
+zamiast klikalnej nazwy.
+
+## Co poprawiono
+
+- nazwa autora głównego wpisu jest klikalna także przy zdjęciach,
+- obsługiwane są handle z `_`,
+- obsługiwane są nazwy zawierające `#` i inne znaki Markdown,
+- cytowany wpis nadal ma własne poprawne hiperłącze,
+- usunięto `@handle` z wyświetlanego nagłówka,
+- układ zdjęć, wideo i GIF-ów pozostał bez zmian.
 
 ## Wdrożenie
 
-1. Nadpisz pliki w repozytorium zawartością tej paczki.
-2. Zrób commit.
-3. Render wykona redeploy.
-4. Nie zmieniaj zmiennych środowiskowych.
-
-Zostaw:
-
-```env
-VIDEO_RENDER_MODE=components_v2
-```
+Nadpisz pliki w repozytorium i wykonaj redeploy na Renderze. Zmiennych środowiskowych nie trzeba zmieniać.
