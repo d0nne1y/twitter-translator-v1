@@ -1,23 +1,23 @@
-# Twitter Translator v40 — większy tekst także przy zdjęciach
+# Twitter Translator v41 — poprawione hiperłącza autorów
 
-Zmiany względem v39:
+Ta wersja naprawia przypadek, w którym Discord pokazywał surowy adres X pod nickiem autora zamiast robić z nicku klikalne hiperłącze.
 
-- ten sam czytelny układ Components V2 działa teraz także dla wpisów ze zdjęciami,
-- autor głównego wpisu i cytatu mają większe nagłówki,
-- treść głównego i cytowanego wpisu jest większa,
-- zdjęcia nadal układają się automatycznie w zwartą galerię (do 4 zdjęć),
-- kolejność pozostaje logiczna: główny wpis → jego zdjęcia/film → cytowany wpis → jego zdjęcia/film,
-- filmy i GIF-y pozostają bez zmian,
-- jeżeli Components V2 nie przyjmie mediów, bot automatycznie użyje wcześniejszego fallbacku.
+## Zmiany
+
+- autor głównego wpisu jest klikalnym linkiem do oryginalnego posta,
+- autor cytowanego wpisu również jest klikalny,
+- surowy URL nie powinien już pojawiać się pod nickiem,
+- bez zmian w układzie zdjęć, filmów, GIF-ów i cytowanych wpisów,
+- media nadal są przypisane do właściwego wpisu.
 
 ## Wdrożenie
 
-1. Rozpakuj ZIP.
-2. Nadpisz pliki w repozytorium na GitHubie.
-3. Zrób commit.
-4. Render wykona automatyczny redeploy.
+1. Nadpisz pliki w repozytorium zawartością tej paczki.
+2. Zrób commit.
+3. Render wykona redeploy.
+4. Nie zmieniaj zmiennych środowiskowych.
 
-Nie zmieniaj zmiennych środowiskowych. Zostaw:
+Zostaw:
 
 ```env
 VIDEO_RENDER_MODE=components_v2

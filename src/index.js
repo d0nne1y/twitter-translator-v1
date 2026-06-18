@@ -81,6 +81,17 @@ function prettyText(text='') {
     .trim();
 }
 function authorLabel(tweet) { return `${tweet.authorName} (@${tweet.authorUser})`; }
+function escapeMarkdownText(value='') {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/([\[\]()*_~`>])/g, '\\$1');
+}
+function maskedLink(label, url) {
+  if (!url) return escapeMarkdownText(label);
+  // Kątowniki wokół URL zapobiegają sytuacji, w której Discord pokazuje
+  // surowy adres pod nickiem zamiast prawidłowego hiperłącza.
+  return `[${escapeMarkdownText(label)}](<${url}>)`;
+}
 function langBadge(tweet, didTranslate) {
   if (!SHOW_LANGUAGE_BADGE) return '';
   return didTranslate ? `${langFlag(tweet.lang)} → 🇵🇱` : `${langFlag(tweet.lang)} bez tłumaczenia`;
@@ -696,8 +707,8 @@ async function buildQuotedContext(quoted) {
     ? xUrl(quoted.authorUser || quoted.user, quoted.id)
     : null;
   const author = quoteUrl
-    ? `### [${authorLabel(quoted)}](${quoteUrl})`
-    : `### ${authorLabel(quoted)}`;
+    ? `### ${maskedLink(authorLabel(quoted), quoteUrl)}`
+    : `### ${escapeMarkdownText(authorLabel(quoted))}`;
   const stats = buildStatsLine(quoted);
   const lines = [author];
   if (stats) lines.push(`*${stats}*`);
@@ -750,7 +761,7 @@ function toLargeComponentText(text, level = 3) {
 
 function buildVideoMainText(tweet, translated, didTranslate) {
   const authorUrl = xUrl(tweet.authorUser || tweet.user, tweet.id);
-  const header = `## [${authorLabel(tweet)}](${authorUrl})`;
+  const header = `## ${maskedLink(authorLabel(tweet), authorUrl)}`;
   const stats = buildComponentStats(tweet);
   const body = toLargeComponentText(truncate(translated || 'Brak tekstu.', 1300), 3);
   const top = [header, stats].filter(Boolean).join('\n');
@@ -767,8 +778,8 @@ function buildVideoQuoteText(quoted, quotedContext) {
     ? xUrl(quoted.authorUser || quoted.user, quoted.id)
     : null;
   const author = quoteUrl
-    ? `### [${authorLabel(quoted)}](${quoteUrl})`
-    : `### ${authorLabel(quoted)}`;
+    ? `### ${maskedLink(authorLabel(quoted), quoteUrl)}`
+    : `### ${escapeMarkdownText(authorLabel(quoted))}`;
   const stats = buildComponentStats(quoted);
   const body = toLargeComponentText(truncate(
     quotedContext.displayText || quoted.text || 'Brak tekstu w cytowanym wpisie.',
