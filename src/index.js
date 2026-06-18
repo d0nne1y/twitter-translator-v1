@@ -12,6 +12,7 @@ const PORT = Number(process.env.PORT || 10000);
 const PHOTO_UPLOAD_LIMIT_MB = Number(process.env.PHOTO_UPLOAD_LIMIT_MB || 8);
 const PHOTO_UPLOAD_LIMIT_BYTES = Math.max(1, PHOTO_UPLOAD_LIMIT_MB) * 1024 * 1024;
 const VIDEO_LINK_MODE = (process.env.VIDEO_LINK_MODE || 'player').toLowerCase(); // player | buttons_only
+const VIDEO_LINK_STYLE = (process.env.VIDEO_LINK_STYLE || 'labeled').toLowerCase(); // labeled | plain | spoiler
 const SHOW_LANGUAGE_BADGE = String(process.env.SHOW_LANGUAGE_BADGE || 'false').toLowerCase() === 'true';
 const SHOW_FOOTER = String(process.env.SHOW_FOOTER || 'false').toLowerCase() === 'true';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
@@ -370,17 +371,22 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
     if (summary) bodyParts.push(`**W skrócie:** ${truncate(summary, 180)}`, '');
     bodyParts.push(prettyText(truncate(translated || 'Brak tekstu.', 1000)));
 
-    // Link FxTwitter musi być jawny w wiadomości, żeby Discord wyrenderował odtwarzacz.
-    // Hiperłącze w nicku NIE wystarcza do playera, więc robimy czysty układ: autor -> większy odstęp -> tekst -> player.
+    // Link FxTwitter musi być obecny jako zwykły tekst, żeby Discord wyrenderował player.
+    // v27: więcej odstępu po autorze i przed playerem + czytelny podpis zamiast gołego linku.
+    // VIDEO_LINK_STYLE=spoiler testuje ukryty link: jeśli Discord nie wyrenderuje playera, ustaw z powrotem labeled.
+    const playerLink = VIDEO_LINK_STYLE === 'spoiler' ? `||${fx}||` : fx;
+    const playerBlock = VIDEO_LINK_STYLE === 'plain'
+      ? playerLink
+      : `🎬 **Odtwarzacz wpisu**
+${playerLink}`;
+
     const content = [
       header,
       '',
-      '',
       bodyParts.join('\n'),
       '',
-      '',
-      fx
-    ].filter(x => x !== '').join('\n');
+      playerBlock
+    ].join('\n');
 
     return message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
   }
@@ -409,7 +415,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v26 polished video spacing + pro photo UI`);
+  console.log(`Tryb mediów: v27 video spacing + labeled player + pro photo UI`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
