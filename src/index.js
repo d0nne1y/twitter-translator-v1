@@ -233,16 +233,27 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   const hasVideo = Boolean(tweet.media.video);
   const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
 
-  // VIDEO: najczyściej = najpierw przetłumaczony wpis, potem player FxTwitter pod spodem.
+  // VIDEO: jedna wiadomość bez dodatkowego embeda.
+  // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
+  // dostajesz jeden wpis bota: tłumaczenie na górze i odtwarzalny player pod spodem.
   if (hasVideo) {
-    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo pojawi się poniżej wpisu.**');
-    await message.channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
-    // Druga wiadomość jest celowa: wtedy Discord renderuje odtwarzacz FxTwitter POD przetłumaczonym wpisem.
-    if (VIDEO_LINK_MODE === 'player') {
-      await new Promise(r => setTimeout(r, 350));
-      return message.channel.send({ content: fx, allowedMentions: { parse: [] } });
-    }
-    return null;
+    const header = `**${tweet.authorName} (@${tweet.authorUser})**`;
+    const title = didTranslate ? `🌍 **${langLabel(tweet.lang)} → PL**` : `**${langLabel(tweet.lang)} · bez tłumaczenia**`;
+    const body = truncate(translated || 'Brak tekstu.', 900);
+    const label = didTranslate ? '*Automatyczne tłumaczenie*' : '*Bez tłumaczenia*';
+
+    const content = [
+      header,
+      title,
+      '',
+      body,
+      '',
+      label,
+      '',
+      fx
+    ].join('\n');
+
+    return message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
   }
 
   // ZDJĘCIA: jedna skondensowana galeria 1/2/4 w jednym embedzie.
@@ -269,7 +280,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v19 no buttons - compact photo gallery, stable video player below tweet`);
+  console.log(`Tryb mediów: v20 video single message - compact photos, video translation + FxTwitter player in one message`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
