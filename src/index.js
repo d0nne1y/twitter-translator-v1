@@ -696,8 +696,8 @@ async function buildQuotedContext(quoted) {
     ? xUrl(quoted.authorUser || quoted.user, quoted.id)
     : null;
   const author = quoteUrl
-    ? `**[${authorLabel(quoted)}](${quoteUrl})**`
-    : `**${authorLabel(quoted)}**`;
+    ? `### [${authorLabel(quoted)}](${quoteUrl})`
+    : `### ${authorLabel(quoted)}`;
   const stats = buildStatsLine(quoted);
   const lines = [author];
   if (stats) lines.push(`*${stats}*`);
@@ -739,11 +739,20 @@ function buildComponentStats(tweet) {
   return stats ? `**${stats}**` : '';
 }
 
+
+function toLargeComponentText(text, level = 3) {
+  const prefix = `${'#'.repeat(Math.min(3, Math.max(1, level)))} `;
+  return prettyText(text || '')
+    .split('\n')
+    .map(line => line.trim() ? `${prefix}${line}` : '')
+    .join('\n');
+}
+
 function buildVideoMainText(tweet, translated, didTranslate) {
   const authorUrl = xUrl(tweet.authorUser || tweet.user, tweet.id);
-  const header = `### [${authorLabel(tweet)}](${authorUrl})`;
+  const header = `## [${authorLabel(tweet)}](${authorUrl})`;
   const stats = buildComponentStats(tweet);
-  const body = prettyText(truncate(translated || 'Brak tekstu.', 1300));
+  const body = toLargeComponentText(truncate(translated || 'Brak tekstu.', 1300), 3);
   const top = [header, stats].filter(Boolean).join('\n');
 
   // Dwie nowe linie pomiędzy nagłówkiem/metadanymi a treścią wpisu dają
@@ -758,16 +767,16 @@ function buildVideoQuoteText(quoted, quotedContext) {
     ? xUrl(quoted.authorUser || quoted.user, quoted.id)
     : null;
   const author = quoteUrl
-    ? `**[${authorLabel(quoted)}](${quoteUrl})**`
-    : `**${authorLabel(quoted)}**`;
+    ? `### [${authorLabel(quoted)}](${quoteUrl})`
+    : `### ${authorLabel(quoted)}`;
   const stats = buildComponentStats(quoted);
-  const body = prettyText(truncate(
+  const body = toLargeComponentText(truncate(
     quotedContext.displayText || quoted.text || 'Brak tekstu w cytowanym wpisie.',
     850
-  ));
+  ), 3);
 
   const top = [
-    '### ↪ Cytowany wpis',
+    '## ↪ Cytowany wpis',
     author,
     stats
   ].filter(Boolean).join('\n');
