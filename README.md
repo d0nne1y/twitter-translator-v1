@@ -1,10 +1,10 @@
-# Twitter Translator v28 — video minimal, zdjęcia bez zmian
+# Twitter Translator v29 — cytowane wpisy
 
 Zmiany:
-- dla wpisów z video bot wysyła tylko przetłumaczony tekst + link FxTwitter, bez autora i bez napisu „Odtwarzacz wpisu”;
-- przerwa między tekstem a linkiem zostaje;
-- zdjęcia zostają jak wcześniej: skondensowana galeria w embedzie;
-- FxTwitter link musi być widoczny, żeby Discord wygenerował player.
+- bot pokazuje cytowane wpisy/reposty z komentarzem jako dodatkowy embed pod głównym wpisem;
+- jeśli cytowany wpis ma zdjęcie/zdjęcia, bot robi z nich skondensowaną galerię;
+- video zostaje w minimalistycznym trybie: sam tekst + link FxTwitter, żeby Discord wygenerował player;
+- układ dla zwykłych zdjęć zostaje bez zmian.
 
 Render — zalecane zmienne:
 
@@ -20,4 +20,4 @@ OPENAI_API_KEY=... # opcjonalnie
 DEEPL_API_KEY=... # opcjonalnie
 ```
 
-Nie wrzucaj `.env` na GitHuba.
+Nie wrzucaj `.env` ani `node_modules` na GitHuba.

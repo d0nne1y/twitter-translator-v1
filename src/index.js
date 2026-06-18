@@ -120,7 +120,8 @@ async function getTweet(user, id) {
         authorAvatar: avatarHd(author.avatar_url || author.avatar || author.profile_image_url || null),
         verified: Boolean(author.verified || author.is_blue_verified || author.blue_verified || author.verified_type),
         stats: normalizeStats(t, data),
-        media
+        media,
+        quoted: normalizeQuoted(t, data)
       };
     } catch (e) { lastErr = e; }
   }
@@ -169,6 +170,35 @@ function normalizeMedia(t, data) {
     media.thumbnail = v.thumbnail_url || v.thumbnail || v.poster || v.cover || media.photos[0] || null;
   }
   return media;
+}
+
+
+function normalizeQuoted(parentT, data) {
+  const q = parentT.quoted_tweet || parentT.quotedTweet || parentT.quoted || parentT.quote || parentT.quoted_status || data.quoted_tweet || data.quotedTweet || data.quoted || data.quote || null;
+  if (!q || typeof q !== 'object') return null;
+
+  const qa = q.author || q.user || q.author_info || {};
+  const qId = String(q.id || q.rest_id || q.tweet_id || q.status_id || '').trim();
+  const qUser = qa.screen_name || qa.username || q.screen_name || q.username || '';
+  const qText = cleanText(q.text || q.full_text || q.content || q.description || '');
+  const qLang = (q.lang || q.language || '').toLowerCase() || guessLang(qText);
+  const qMedia = normalizeMedia(q, q);
+
+  if (!qId && !qText && !qMedia.photos.length && !qMedia.video) return null;
+
+  return {
+    id: qId || 'quoted',
+    user: qUser || 'x',
+    text: qText,
+    lang: qLang,
+    authorName: qa.name || qa.display_name || qa.screen_name || qa.username || qUser || 'Autor cytowanego wpisu',
+    authorUser: qa.screen_name || qa.username || qUser || 'unknown',
+    authorAvatar: avatarHd(qa.avatar_url || qa.avatar || qa.profile_image_url || null),
+    verified: Boolean(qa.verified || qa.is_blue_verified || qa.blue_verified || qa.verified_type),
+    stats: normalizeStats(q, q),
+    media: qMedia,
+    isQuoted: true
+  };
 }
 
 function guessLang(text) {
@@ -356,9 +386,51 @@ function buildMainEmbed(tweet, translated, didTranslate, imageAttachmentName = n
   return e;
 }
 
+async function buildQuotedPayload(quoted) {
+  if (!quoted) return { embeds: [], files: [] };
+
+  const files = [];
+  let imageAttachmentName = null;
+
+  if (quoted.media?.photos?.length) {
+    try {
+      const collage = await buildPhotoCollage(quoted);
+      if (collage) {
+        files.push(collage);
+        imageAttachmentName = collage.name;
+      }
+    } catch (e) {
+      console.warn('Nie udało się zrobić galerii cytowanego wpisu:', e.message);
+    }
+  }
+
+  const stats = buildStatsLine(quoted);
+  const quotedText = prettyText(truncate(quoted.text || 'Brak tekstu w cytowanym wpisie.', 650));
+  const description = [stats ? `*${stats}*` : '', quotedText].filter(Boolean).join('\n\n');
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2B2D31)
+    .setAuthor({
+      name: `↪ ${authorLabel(quoted)}`,
+      iconURL: quoted.authorAvatar || undefined,
+      url: quoted.id && quoted.id !== 'quoted' ? xUrl(quoted.authorUser || quoted.user, quoted.id) : undefined
+    })
+    .setDescription(description);
+
+  if (imageAttachmentName) embed.setImage(`attachment://${imageAttachmentName}`);
+  else if (quoted.media?.photos?.[0]) embed.setImage(quoted.media.photos[0]);
+
+  if (quoted.media?.video && quoted.authorUser && quoted.id && quoted.id !== 'quoted') {
+    embed.addFields({ name: '🎥 Cytowany wpis ma video', value: fxUrl(quoted.authorUser, quoted.id) });
+  }
+
+  return { embeds: [embed], files };
+}
+
 async function sendTweetMessage(message, tweet, translated, didTranslate, fx, originalX, summary = '') {
   const hasVideo = Boolean(tweet.media.video);
   const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
+  const quotedPayload = await buildQuotedPayload(tweet.quoted);
 
   // VIDEO: jedna wiadomość bez dodatkowego embeda.
   // Discord nie pozwala botom edytować treści karty FxTwitter, ale gdy tekst + link są w tej samej wiadomości,
@@ -379,7 +451,9 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
       playerLink
     ].join('\n');
 
-    return message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
+    const sent = await message.channel.send({ content: truncate(content, 1900), allowedMentions: { parse: [] } });
+    if (quotedPayload.embeds.length) await message.channel.send({ embeds: quotedPayload.embeds, files: quotedPayload.files, allowedMentions: { parse: [] } });
+    return sent;
   }
 
   // ZDJĘCIA: jedna skondensowana galeria 1/2/4 w jednym embedzie.
@@ -388,14 +462,14 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
       const collage = await buildPhotoCollage(tweet);
       if (collage) {
         const embed = buildMainEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate, collage.name);
-        return await message.channel.send({ embeds: [embed], files: [collage], allowedMentions: { parse: [] } });
+        return await message.channel.send({ embeds: [embed, ...quotedPayload.embeds], files: [collage, ...quotedPayload.files], allowedMentions: { parse: [] } });
       }
     } catch (e) {
       console.warn('Nie udało się zrobić galerii zdjęć, fallback do pierwszego zdjęcia:', e.message);
     }
 
     const embed = buildFallbackEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate, tweet.media.photos[0], 'Nie udało się złożyć galerii, więc pokazuję pierwsze zdjęcie.');
-    return message.channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+    return message.channel.send({ embeds: [embed, ...quotedPayload.embeds], files: quotedPayload.files, allowedMentions: { parse: [] } });
   }
 
   const embed = buildMainEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate);
@@ -406,7 +480,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v28 video minimal + pro photo UI`);
+  console.log(`Tryb mediów: v29 quoted tweets + video minimal + pro photo UI`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
