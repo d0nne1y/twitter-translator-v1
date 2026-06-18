@@ -1,18 +1,24 @@
-# Twitter Translator v39 — większy tekst
+# Twitter Translator v40 — większy tekst także przy zdjęciach
 
-Zmiany względem v38:
+Zmiany względem v39:
 
-- większy tekst głównego wpisu w Components V2,
-- większy tekst cytowanego wpisu,
-- wyraźniejsza hierarchia: autor jako nagłówek poziomu 2, treść jako poziom 3,
-- kolejność mediów pozostaje bez zmian: główny wpis → jego media → cytowany wpis → jego media,
-- zwykłe wpisy ze zdjęciami pozostają bez zmian.
+- ten sam czytelny układ Components V2 działa teraz także dla wpisów ze zdjęciami,
+- autor głównego wpisu i cytatu mają większe nagłówki,
+- treść głównego i cytowanego wpisu jest większa,
+- zdjęcia nadal układają się automatycznie w zwartą galerię (do 4 zdjęć),
+- kolejność pozostaje logiczna: główny wpis → jego zdjęcia/film → cytowany wpis → jego zdjęcia/film,
+- filmy i GIF-y pozostają bez zmian,
+- jeżeli Components V2 nie przyjmie mediów, bot automatycznie użyje wcześniejszego fallbacku.
 
 ## Wdrożenie
 
-1. Nadpisz pliki w repozytorium zawartością tej paczki.
-2. Zrób commit.
-3. Render wykona redeploy.
-4. Zostaw `VIDEO_RENDER_MODE=components_v2`.
+1. Rozpakuj ZIP.
+2. Nadpisz pliki w repozytorium na GitHubie.
+3. Zrób commit.
+4. Render wykona automatyczny redeploy.
 
-Discord nie pozwala ustawić dowolnego rozmiaru czcionki. Ta wersja używa nagłówków Markdown w `TextDisplay`, aby tekst był realnie większy.
+Nie zmieniaj zmiennych środowiskowych. Zostaw:
+
+```env
+VIDEO_RENDER_MODE=components_v2
+```

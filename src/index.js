@@ -812,7 +812,7 @@ function buildComponentMediaGallery(tweet, labelPrefix = 'Media z wpisu') {
   return items.length ? new MediaGalleryBuilder().addItems(...items) : null;
 }
 
-async function sendComponentsV2Video(message, tweet, translated, didTranslate, quotedContext) {
+async function sendComponentsV2Tweet(message, tweet, translated, didTranslate, quotedContext) {
   const container = new ContainerBuilder()
     .setAccentColor(didTranslate ? 0x00B7FF : 0x5865F2)
     .addTextDisplayComponents(
@@ -869,25 +869,32 @@ async function sendFxVideoFallback(message, tweet, translated, quotedContext, fx
 
 async function sendTweetMessage(message, tweet, translated, didTranslate, fx, originalX, summary = '') {
   const hasVideo = Boolean(tweet.media.video || tweet.quoted?.media?.video);
-  const hasPhotos = tweet.media.photos.length > 0 && !hasVideo;
+  const hasPhotos = Boolean(
+    tweet.media.photos.length ||
+    tweet.quoted?.media?.photos?.length
+  );
+  const hasMedia = hasVideo || hasPhotos;
   const quotedContext = await buildQuotedContext(tweet.quoted);
 
-  // VIDEO/GIF: Components V2 pozwala umieścić tekst i zewnętrzne wideo
-  // wewnątrz jednego wizualnego kontenera. Jeśli Discord odrzuci bezpośredni
-  // adres MP4, automatycznie wracamy do stabilnego playera FxTwitter.
-  if (hasVideo) {
-    if (VIDEO_RENDER_MODE === 'components_v2') {
-      try {
-        return await sendComponentsV2Video(message, tweet, translated, didTranslate, quotedContext);
-      } catch (e) {
-        console.warn('Components V2 video failed, fallback FxTwitter:', e.message);
-      }
+  // WSZYSTKIE MEDIA: zdjęcia, GIF-y i filmy korzystają z tego samego
+  // czytelnego układu Components V2. Dzięki temu większa czcionka i hierarchia
+  // z wersji filmowej działają też dla zwykłych wpisów ze zdjęciami.
+  // Kolejność pozostaje logiczna:
+  // główny wpis -> jego media -> cytowany wpis -> jego media.
+  if (hasMedia && VIDEO_RENDER_MODE === 'components_v2') {
+    try {
+      return await sendComponentsV2Tweet(message, tweet, translated, didTranslate, quotedContext);
+    } catch (e) {
+      console.warn('Components V2 media failed, uruchamiam fallback:', e.message);
     }
+  }
+
+  // Wideo/GIF: awaryjnie korzystamy ze stabilnego playera FxTwitter.
+  if (hasVideo) {
     return sendFxVideoFallback(message, tweet, translated, quotedContext, fx, summary);
   }
 
-  // ZDJĘCIA / TEKST: główny wpis i cytowany wpis są jednym embedem.
-  // Jeżeli oba mają zdjęcia, galerie są składane pionowo w jeden obraz.
+  // ZDJĘCIA: fallback do wcześniejszej, sprawdzonej galerii jako pojedynczy obraz.
   let mediaAttachment = null;
   try {
     mediaAttachment = await buildCombinedMediaAttachment(tweet, tweet.quoted);
@@ -915,9 +922,9 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
     });
   }
 
-  // Fallback: nawet gdy nie uda się pobrać zdjęć, cytat nadal jest częścią tego samego embeda.
+  // Wpis bez mediów albo awaryjny fallback tekstowy.
   const embed = buildMainEmbed(tweet, displayText, didTranslate, null, '', quotedContext);
-  if (hasPhotos && tweet.media.photos[0]) embed.setImage(tweet.media.photos[0]);
+  if (tweet.media.photos[0]) embed.setImage(tweet.media.photos[0]);
   else if (tweet.quoted?.media?.photos?.[0]) embed.setImage(tweet.quoted.media.photos[0]);
 
   return message.channel.send({
@@ -930,7 +937,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v38 czytelne Components V2 + media przypisane do wpisów, DeepL -> Google fallback`);
+  console.log(`Tryb mediów: v40 czytelne Components V2 dla zdjęć, GIF-ów i filmów, DeepL -> Google fallback`);
   console.log(`Renderowanie wideo: ${VIDEO_RENDER_MODE}`);
 });
 
