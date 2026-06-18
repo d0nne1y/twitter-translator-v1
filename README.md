@@ -1,5 +1,8 @@
-# Twitter Translator v30 - quoted fetch fix
+# Twitter Translator v31 - quoted syndication fallback
 
-Poprawka cytowanych tweetów: jeśli FxTwitter API nie zwróci cytowanego wpisu jako obiektu, bot znajdzie link do cytowanego wpisu i dociągnie go osobnym requestem.
+Zmiany względem v30:
+- cytowane tweety są wykrywane nie tylko z obiektu/URL, ale też po ID,
+- dodatkowy fallback przez `cdn.syndication.twimg.com/tweet-result`,
+- logi informują, czy cytowany wpis został znaleziony.
 
-Wgrywasz jak poprzednio: GitHub -> commit -> Render redeploy.
+Wgraj na GitHuba, zrób commit i Render redeploy.

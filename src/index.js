@@ -128,6 +128,84 @@ function findQuotedReference(t, data, currentUser, currentId) {
   return null;
 }
 
+function findQuotedIdOnly(t = {}, data = {}, currentId = '') {
+  const candidates = [
+    t.quoted_status_id_str, t.quoted_status_id, t.quotedTweetId, t.quoted_tweet_id,
+    t.quoted_id, t.quote_id, t.quote_tweet_id, t.quoteTweetId,
+    data.quoted_status_id_str, data.quoted_status_id, data.quotedTweetId, data.quoted_tweet_id,
+    data.quoted_id, data.quote_id, data.quote_tweet_id, data.quoteTweetId
+  ];
+  for (const v of candidates) {
+    const id = String(v || '').match(/\d{10,25}/)?.[0];
+    if (id && id !== String(currentId)) return id;
+  }
+  return null;
+}
+
+async function fetchSyndicationTweet(id) {
+  const urls = [
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=pl`,
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=en`,
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}`
+  ];
+  let lastErr;
+  for (const u of urls) {
+    try {
+      const res = await fetch(u, {
+        headers: {
+          'user-agent': 'Mozilla/5.0 DiscordBot TwitterTranslator',
+          'accept': 'application/json,text/plain,*/*'
+        }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (json && typeof json === 'object') return json;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('Syndication fetch failed');
+}
+
+function normalizeSyndicationTweet(q) {
+  if (!q || typeof q !== 'object') return null;
+  const userObj = q.user || {};
+  const id = String(q.id_str || q.id || '').trim();
+  const screen = userObj.screen_name || userObj.username || q.screen_name || q.username || '';
+  const text = cleanText(q.text || q.full_text || q.content || q.description || '');
+  const media = normalizeMedia(q, q);
+
+  // syndication.twimg.com często trzyma zdjęcia w mediaDetails.
+  const mediaDetails = Array.isArray(q.mediaDetails) ? q.mediaDetails : [];
+  const photos = mediaDetails
+    .filter(m => (m.type === 'photo' || m.type === 'animated_gif') && (m.media_url_https || m.media_url))
+    .map(m => m.media_url_https || m.media_url);
+  if (photos.length && !media.photos.length) media.photos = [...new Set(photos)];
+
+  const videoItem = mediaDetails.find(m => m.type === 'video' || m.type === 'animated_gif');
+  if (videoItem && !media.video) {
+    const variants = (videoItem.video_info?.variants || [])
+      .filter(v => v.url && String(v.url).includes('.mp4'))
+      .map(v => ({ url: v.url, bitrate: Number(v.bitrate || 0), contentType: v.content_type || '' }))
+      .sort((a,b) => (a.bitrate || 0) - (b.bitrate || 0));
+    media.video = { variants, url: variants[0]?.url || null };
+    media.thumbnail = videoItem.media_url_https || videoItem.media_url || null;
+  }
+
+  if (!id && !text && !media.photos.length && !media.video) return null;
+  return {
+    id: id || 'quoted',
+    user: screen || 'x',
+    text,
+    lang: (q.lang || q.language || '').toLowerCase() || guessLang(text),
+    authorName: userObj.name || userObj.display_name || screen || 'Autor cytowanego wpisu',
+    authorUser: screen || 'unknown',
+    authorAvatar: avatarHd(userObj.profile_image_url_https || userObj.profile_image_url || userObj.avatar_url || null),
+    verified: Boolean(userObj.verified || userObj.is_blue_verified || userObj.blue_verified),
+    stats: normalizeStats(q, q),
+    media,
+    isQuoted: true
+  };
+}
+
 async function fetchJson(url) {
   const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 DiscordBot TwitterTranslator' } });
   if (!res.ok) throw new Error(`HTTP ${res.status} przy pobieraniu ${url}`);
@@ -151,19 +229,46 @@ async function getTweet(user, id, depth = 0) {
       const media = normalizeMedia(t, data);
 
       let quoted = normalizeQuoted(t, data);
-      // FxTwitter/X czasem nie zwraca cytowanego wpisu jako obiektu, tylko jako link w entities/text.
-      // Wtedy dociągamy cytowany tweet osobnym requestem.
+      // Cytowane tweety bywają zwracane na różne sposoby: jako obiekt, URL, samo ID albo tylko w syndication API.
       if (!quoted && depth < 1) {
         const ref = findQuotedReference(t, data, user, id);
-        if (ref && ref.id && String(ref.id) !== String(id)) {
+        const idOnly = findQuotedIdOnly(t, data, id);
+        const quoteId = ref?.id || idOnly;
+        const quoteUser = ref?.user || user;
+        if (quoteId && String(quoteId) !== String(id)) {
           try {
-            quoted = await getTweet(ref.user, ref.id, depth + 1);
+            quoted = await getTweet(quoteUser, quoteId, depth + 1);
             quoted.isQuoted = true;
+            console.log(`Dociągnięto cytowany wpis przez FxTwitter: ${quoteId}`);
           } catch (e) {
-            console.warn('Nie udało się dociągnąć cytowanego wpisu:', e.message);
+            console.warn('Nie udało się dociągnąć cytowanego wpisu przez FxTwitter:', e.message);
           }
         }
       }
+
+      if (!quoted && depth < 1) {
+        try {
+          const synd = await fetchSyndicationTweet(id);
+          quoted = normalizeQuoted(synd, synd);
+          if (!quoted && synd.quoted_tweet) quoted = normalizeSyndicationTweet(synd.quoted_tweet);
+          if (!quoted && synd.quotedTweet) quoted = normalizeSyndicationTweet(synd.quotedTweet);
+          if (!quoted && synd.quoted_status) quoted = normalizeSyndicationTweet(synd.quoted_status);
+          const qid = findQuotedIdOnly(synd, synd, id);
+          if (!quoted && qid) {
+            try {
+              quoted = await getTweet(user, qid, depth + 1);
+              quoted.isQuoted = true;
+            } catch (e) {
+              console.warn('Nie udało się dociągnąć cytowanego wpisu po ID z syndication:', e.message);
+            }
+          }
+          if (quoted) console.log(`Znaleziono cytowany wpis przez syndication dla ${id}: ${quoted.id}`);
+        } catch (e) {
+          console.warn('Syndication nie zwróciło cytowanego wpisu:', e.message);
+        }
+      }
+
+      if (!quoted) console.log(`Brak cytowanego wpisu w danych dla ${user}/${id}`);
 
       return {
         id,
@@ -535,7 +640,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v30 quoted tweets fetch + video minimal + pro photo UI`);
+  console.log(`Tryb mediów: v31 quoted tweets syndication fallback + video minimal + pro photo UI`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
