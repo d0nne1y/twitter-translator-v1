@@ -115,7 +115,7 @@ async function translateText(text, from, to) {
   if (DEEPL_API_KEY) {
     try {
       const host = DEEPL_API_KEY.endsWith(':fx') ? 'https://api-free.deepl.com/v2/translate' : 'https://api.deepl.com/v2/translate';
-      const key = DEEPL_API_KEY.endsWith(':fx') ? DEEPL_API_KEY.slice(0, -3) : DEEPL_API_KEY;
+      const key = DEEPL_API_KEY;
       const params = { text, target_lang: to.toUpperCase() };
       if (from && from !== 'auto') params.source_lang = from.toUpperCase();
       const body = new URLSearchParams(params);
@@ -143,8 +143,7 @@ function buildNativeContent(tweet, translated, didTranslate, fx, hasVideo) {
   const header = `**${tweet.authorName} (@${tweet.authorUser})**`;
   const mode = didTranslate ? `🌍 **${langLabel(tweet.lang)} → PL**` : `**${langLabel(tweet.lang)} · bez tłumaczenia**`;
   const parts = [header, mode, '', truncate(translated || 'Brak tekstu.', didTranslate ? 650 : 1100)];
-  if (didTranslate && tweet.text) parts.push('', '**Oryginał**', truncate(tweet.text, 500));
-  parts.push('', `*Tweet ID: ${tweet.id}*`);
+  parts.push('', `*Automatycznie ${didTranslate ? 'przetłumaczone' : 'bez tłumaczenia'}*`);
   if (hasVideo && VIDEO_LINK_MODE === 'player') {
     // Link musi być jawny, żeby Discord zrobił natywny odtwarzacz.
     parts.push('', fx);
@@ -157,8 +156,8 @@ function buildFallbackEmbed(tweet, translated, didTranslate, imageUrl=null, note
     .setColor(didTranslate ? 0x00AEEF : 0x5865F2)
     .setAuthor({ name: `${tweet.authorName} (@${tweet.authorUser})`, iconURL: tweet.authorAvatar || undefined })
     .setTitle(didTranslate ? `🌍 ${langLabel(tweet.lang)} → PL` : `${langLabel(tweet.lang)} · bez tłumaczenia`)
-    .setDescription([truncate(translated || 'Brak tekstu.', 900), didTranslate && tweet.text ? `**Oryginał**\n${truncate(tweet.text, 500)}` : '', note].filter(Boolean).join('\n\n'))
-    .setFooter({ text: `Tweet ID: ${tweet.id}` });
+    .setDescription([truncate(translated || 'Brak tekstu.', 1200), note].filter(Boolean).join('\n\n'))
+    .setFooter({ text: didTranslate ? 'Automatyczne tłumaczenie' : 'Oryginał bez tłumaczenia' });
   if (imageUrl) e.setImage(imageUrl);
   return e;
 }
@@ -245,7 +244,7 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
 
   // VIDEO: najczyściej = najpierw przetłumaczony wpis, potem player FxTwitter pod spodem.
   if (hasVideo) {
-    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo pojawi się poniżej wpisu.**');
+    const embed = buildMainEmbed(tweet, translated, didTranslate, null, '🎬 **Wideo poniżej.**');
     await message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
     // Druga wiadomość jest celowa: wtedy Discord renderuje odtwarzacz FxTwitter POD przetłumaczonym wpisem.
     if (VIDEO_LINK_MODE === 'player') {
@@ -267,7 +266,7 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
       console.warn('Nie udało się zrobić galerii zdjęć, fallback do pierwszego zdjęcia:', e.message);
     }
 
-    const embed = buildFallbackEmbed(tweet, translated, didTranslate, tweet.media.photos[0], 'Pozostałe zdjęcia: ' + tweet.media.photos.slice(1).map((_, i) => `Obrazek ${i+2}`).join(', '));
+    const embed = buildFallbackEmbed(tweet, translated, didTranslate, tweet.media.photos[0], 'Nie udało się złożyć galerii, więc pokazuję pierwsze zdjęcie.');
     return message.channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } });
   }
 
@@ -279,7 +278,7 @@ client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v15 final layout - tweet embed first, video player below, compact photo gallery`);
+  console.log(`Tryb mediów: v16 clean layout - no original text in embeds, compact photo gallery, video below tweet`);
 });
 client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 

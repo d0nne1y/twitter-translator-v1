@@ -1,52 +1,44 @@
-# Twitter Translator v15 - final layout
+# Twitter Translator Discord Bot — v16 Clean
 
-Układ dopasowany do Twoich screenów:
+Układ dopracowany pod czytelność:
 
-- wiadomość użytkownika z linkiem jest usuwana,
-- **video:** najpierw przetłumaczony wpis/tweet, potem pod nim player FxTwitter,
-- **zdjęcia:** skondensowana galeria 1/2/4 w jednym embedzie,
-- EN/PL pokazuje bez tłumaczenia,
-- inne języki tłumaczy na PL,
-- DeepL działa przez `DEEPL_API_KEY`, a bez niego jest fallback.
+- usuwa oryginalną wiadomość z linkiem,
+- pokazuje tylko tłumaczenie, bez sekcji „Oryginał” w embedzie,
+- angielskie i polskie wpisy pokazuje bez tłumaczenia,
+- zdjęcia składa w jedną skondensowaną galerię 1/2/4,
+- przy video: najpierw czysty embed z tekstem, potem player FxTwitter pod spodem,
+- DeepL jest używany jako główny tłumacz, jeśli dodasz `DEEPL_API_KEY`; bez klucza działa fallback.
 
-## Render
+## Render — zmienne
 
-Build Command:
+```env
+DISCORD_TOKEN=twój_token
+TARGET_LANG=pl
+IGNORE_LANGS=en,pl
+DELETE_ORIGINAL_MESSAGE=true
+DEEPL_API_KEY=twój_klucz_deepl_opcjonalnie
+PHOTO_UPLOAD_LIMIT_MB=8
+VIDEO_LINK_MODE=player
+```
+
+Usuń stare zmienne typu:
+
+```env
+MAX_VIDEO_UPLOAD_MB
+UPLOAD_VIDEO_ATTACHMENT
+VIDEO_FALLBACK_LINK_MODE
+```
+
+## Komendy Render
+
+Build command:
 
 ```bash
 npm install
 ```
 
-Start Command:
+Start command:
 
 ```bash
 npm start
 ```
-
-Environment Variables:
-
-```env
-DISCORD_TOKEN=...
-TARGET_LANG=pl
-IGNORE_LANGS=en,pl
-DELETE_ORIGINAL_MESSAGE=true
-PHOTO_UPLOAD_LIMIT_MB=8
-VIDEO_LINK_MODE=player
-DEEPL_API_KEY=opcjonalnie
-```
-
-Usuń stare zmienne od uploadu video, jeśli jeszcze są:
-
-```env
-UPLOAD_VIDEO_ATTACHMENT
-MAX_VIDEO_UPLOAD_MB
-VIDEO_FALLBACK_LINK_MODE
-```
-
-Wymagane uprawnienia bota na Discordzie:
-
-- Wyświetlanie kanałów
-- Wysyłanie wiadomości
-- Osadzanie linków
-- Czytanie historii czatu
-- Zarządzanie wiadomościami, jeśli `DELETE_ORIGINAL_MESSAGE=true`
