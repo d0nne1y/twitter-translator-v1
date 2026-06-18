@@ -1,12 +1,30 @@
-# Twitter Translator v33 — bez OpenAI
+# Twitter Translator v34 — cytowane wpisy naprawione
 
-Wersja usuwa całkowicie OpenAI z kodu. Tłumaczenie działa w kolejności:
+Ta wersja bazuje bezpośrednio na przesłanym projekcie v33 i poprawia obsługę cytowanych wpisów.
 
-1. DeepL, jeśli ustawisz `DEEPL_API_KEY`
-2. Google Translate jako fallback
-3. Jeśli oba padną, bot pokazuje oryginalny tekst
+## Najważniejsza poprawka
 
-## Render — zmienne, które zostawić
+W poprzedniej wersji cytowany wpis mógł zostać poprawnie pobrany, ale nie był dołączany do wiadomości Discorda, gdy główny wpis nie zawierał własnego zdjęcia ani filmu. To dotyczyło dokładnie przypadków typu:
+
+- główny wpis: sam tekst,
+- pod nim na X: cytowany wpis ze zdjęciem lub filmem.
+
+v34 dołącza cytowany wpis także w tym układzie.
+
+## Dodatkowe zabezpieczenia
+
+- obsługa `tweet.quote` zgodnie z API FxTwitter,
+- dodatkowe warianty nazw pól i zagnieżdżonych odpowiedzi,
+- fallback przez `api.vxtwitter.com`,
+- fallback przez Twitter Syndication z tokenem,
+- dociąganie cytowanego wpisu po ID lub adresie URL,
+- galeria zdjęć cytowanego wpisu,
+- tłumaczenie cytowanego wpisu, jeśli jego język nie znajduje się w `IGNORE_LANGS`,
+- brak podwójnego komunikatu startowego `ready`.
+
+## Render — zmienne
+
+Nie musisz dodawać żadnych nowych zmiennych. Zostaw:
 
 ```env
 DISCORD_TOKEN=...
@@ -22,29 +40,17 @@ VIDEO_LINK_MODE=player
 VIDEO_LINK_STYLE=plain
 ```
 
-## Render — zmienne, które można usunąć
-
-```env
-OPENAI_API_KEY
-OPENAI_MODEL
-TRANSLATOR_PROVIDER
-SHOW_SUMMARY
-SUPPRESS_ORIGINAL_EMBED
-MAX_VIDEO_UPLOAD_MB
-UPLOAD_VIDEO_ATTACHMENT
-VIDEO_FALLBACK_LINK_MODE
-```
-
 ## Deploy
-
-Build Command:
 
 ```bash
 npm install
+npm start
 ```
 
-Start Command:
+Po wdrożeniu przetestuj wpis, który cytuje inny wpis. W logach zobaczysz jedną z informacji:
 
-```bash
-npm start
+```text
+Dociągnięto cytowany wpis przez FxTwitter: ...
+Znaleziono cytowany wpis przez syndication dla ...
+Brak cytowanego wpisu w danych dla ...
 ```

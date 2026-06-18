@@ -91,6 +91,83 @@ function parseTweetRefFromUrl(url='') {
   return m ? { user: m[1], id: m[2] } : null;
 }
 
+function isObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function unwrapTweetEnvelope(value) {
+  let current = value;
+  const seen = new Set();
+  for (let i = 0; i < 8 && isObject(current) && !seen.has(current); i++) {
+    seen.add(current);
+    const next = current.tweet || current.status || current.quoted_tweet || current.quotedTweet ||
+      current.result || current.data || current.tweet_results?.result || current.tweetResult?.result;
+    if (!isObject(next) || next === current) break;
+    current = next;
+  }
+  return current;
+}
+
+function looksLikeTweetObject(value) {
+  if (!isObject(value)) return false;
+  const v = unwrapTweetEnvelope(value);
+  return Boolean(
+    v.id || v.id_str || v.rest_id || v.tweet_id || v.status_id ||
+    v.text || v.full_text || v.content || v.description ||
+    v.author || v.user || v.media || v.mediaDetails
+  );
+}
+
+function findQuoteObjectDeep(root) {
+  if (!isObject(root)) return null;
+  const queue = [root];
+  const seen = new Set();
+  while (queue.length) {
+    const current = queue.shift();
+    if (!isObject(current) || seen.has(current)) continue;
+    seen.add(current);
+    for (const [key, value] of Object.entries(current)) {
+      const k = key.toLowerCase();
+      if (/quote|quoted_status/.test(k) && !/(count|id|url)$/.test(k) && isObject(value)) {
+        const unwrapped = unwrapTweetEnvelope(value);
+        if (looksLikeTweetObject(unwrapped)) return unwrapped;
+      }
+      if (isObject(value)) queue.push(value);
+      else if (Array.isArray(value)) {
+        for (const item of value) if (isObject(item)) queue.push(item);
+      }
+    }
+  }
+  return null;
+}
+
+function findQuoteIdDeep(root, currentId='') {
+  if (!isObject(root)) return null;
+  const queue = [root];
+  const seen = new Set();
+  while (queue.length) {
+    const current = queue.shift();
+    if (!isObject(current) || seen.has(current)) continue;
+    seen.add(current);
+    for (const [key, value] of Object.entries(current)) {
+      const k = key.toLowerCase();
+      if (/^(quoted_status_id(_str)?|quoted_tweet_id|quote_tweet_id|quote_id|quotedid|quotedtweetid)$/.test(k)) {
+        const id = String(value || '').match(/\d{10,25}/)?.[0];
+        if (id && id !== String(currentId)) return id;
+      }
+      if (isObject(value)) queue.push(value);
+      else if (Array.isArray(value)) for (const item of value) if (isObject(item)) queue.push(item);
+    }
+  }
+  return null;
+}
+
+function syndicationToken(id) {
+  const n = Number(id);
+  if (!Number.isFinite(n)) return '0';
+  return ((n / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '');
+}
+
 function collectDeepUrls(obj, out = []) {
   if (!obj || out.length > 50) return out;
   if (typeof obj === 'string') {
@@ -135,14 +212,16 @@ function findQuotedIdOnly(t = {}, data = {}, currentId = '') {
     const id = String(v || '').match(/\d{10,25}/)?.[0];
     if (id && id !== String(currentId)) return id;
   }
-  return null;
+  return findQuoteIdDeep(t, currentId) || findQuoteIdDeep(data, currentId);
 }
 
 async function fetchSyndicationTweet(id) {
+  const token = syndicationToken(id);
   const urls = [
-    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=pl`,
-    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=en`,
-    `https://cdn.syndication.twimg.com/tweet-result?id=${id}`
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=pl&token=${token}`,
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=en&token=${token}`,
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&token=${token}`,
+    `https://cdn.syndication.twimg.com/tweet-result?id=${id}&lang=en&token=0`
   ];
   let lastErr;
   for (const u of urls) {
@@ -211,13 +290,15 @@ async function fetchJson(url) {
 async function getTweet(user, id, depth = 0) {
   const apiUrls = [
     `https://api.fxtwitter.com/${user}/status/${id}`,
-    `https://api.fxtwitter.com/status/${id}`
+    `https://api.fxtwitter.com/status/${id}`,
+    `https://api.vxtwitter.com/${user}/status/${id}`,
+    `https://api.vxtwitter.com/status/${id}`
   ];
   let lastErr;
   for (const u of apiUrls) {
     try {
       const data = await fetchJson(u);
-      const t = data.tweet || data.status || data;
+      const t = unwrapTweetEnvelope(data.tweet || data.status || data);
       const author = t.author || data.author || {};
       const rawText = t.text || t.full_text || t.content || '';
       const text = cleanText(rawText);
@@ -246,9 +327,8 @@ async function getTweet(user, id, depth = 0) {
         try {
           const synd = await fetchSyndicationTweet(id);
           quoted = normalizeQuoted(synd, synd);
-          if (!quoted && synd.quoted_tweet) quoted = normalizeSyndicationTweet(synd.quoted_tweet);
-          if (!quoted && synd.quotedTweet) quoted = normalizeSyndicationTweet(synd.quotedTweet);
-          if (!quoted && synd.quoted_status) quoted = normalizeSyndicationTweet(synd.quoted_status);
+          const syndQuote = synd.quoted_tweet || synd.quotedTweet || synd.quoted_status || findQuoteObjectDeep(synd);
+          if (!quoted && syndQuote) quoted = normalizeSyndicationTweet(unwrapTweetEnvelope(syndQuote));
           const qid = findQuotedIdOnly(synd, synd, id);
           if (!quoted && qid) {
             try {
@@ -330,15 +410,35 @@ function normalizeMedia(t, data) {
 
 
 function normalizeQuoted(parentT, data) {
-  const q = parentT.quoted_tweet || parentT.quotedTweet || parentT.quoted || parentT.quote || parentT.quoted_status || data.quoted_tweet || data.quotedTweet || data.quoted || data.quote || null;
+  const direct = parentT?.quote || parentT?.quoted_tweet || parentT?.quotedTweet || parentT?.quoted ||
+    parentT?.quoted_status || parentT?.quoted_status_result || data?.quote || data?.quoted_tweet ||
+    data?.quotedTweet || data?.quoted || data?.quoted_status || data?.quoted_status_result || null;
+  const q = unwrapTweetEnvelope(isObject(direct) ? direct : findQuoteObjectDeep(parentT) || findQuoteObjectDeep(data));
   if (!q || typeof q !== 'object') return null;
 
-  const qa = q.author || q.user || q.author_info || {};
-  const qId = String(q.id || q.rest_id || q.tweet_id || q.status_id || '').trim();
-  const qUser = qa.screen_name || qa.username || q.screen_name || q.username || '';
-  const qText = cleanText(q.text || q.full_text || q.content || q.description || '');
-  const qLang = (q.lang || q.language || '').toLowerCase() || guessLang(qText);
+  const legacy = isObject(q.legacy) ? q.legacy : {};
+  const coreUser = q.core?.user_results?.result || q.core?.userResult?.result || {};
+  const userLegacy = coreUser.legacy || {};
+  const qa = q.author || q.user || q.author_info || coreUser || {};
+  const qId = String(q.id || q.id_str || q.rest_id || q.tweet_id || q.status_id || legacy.id_str || '').trim();
+  const qUser = qa.screen_name || qa.username || userLegacy.screen_name || q.screen_name || q.username || '';
+  const qText = cleanText(q.text || q.full_text || q.content || q.description || legacy.full_text || legacy.text || '');
+  const qLang = (q.lang || q.language || legacy.lang || '').toLowerCase() || guessLang(qText);
   const qMedia = normalizeMedia(q, q);
+
+  // GraphQL/syndication fallbacks can keep media under legacy or mediaDetails.
+  if (!qMedia.photos.length && legacy.extended_entities?.media) {
+    qMedia.photos = legacy.extended_entities.media
+      .filter(m => m.type === 'photo')
+      .map(m => m.media_url_https || m.media_url)
+      .filter(Boolean);
+  }
+  if (!qMedia.photos.length && Array.isArray(q.mediaDetails)) {
+    qMedia.photos = q.mediaDetails
+      .filter(m => m.type === 'photo')
+      .map(m => m.media_url_https || m.media_url)
+      .filter(Boolean);
+  }
 
   if (!qId && !qText && !qMedia.photos.length && !qMedia.video) return null;
 
@@ -347,11 +447,11 @@ function normalizeQuoted(parentT, data) {
     user: qUser || 'x',
     text: qText,
     lang: qLang,
-    authorName: qa.name || qa.display_name || qa.screen_name || qa.username || qUser || 'Autor cytowanego wpisu',
-    authorUser: qa.screen_name || qa.username || qUser || 'unknown',
-    authorAvatar: avatarHd(qa.avatar_url || qa.avatar || qa.profile_image_url || null),
-    verified: Boolean(qa.verified || qa.is_blue_verified || qa.blue_verified || qa.verified_type),
-    stats: normalizeStats(q, q),
+    authorName: qa.name || qa.display_name || userLegacy.name || qa.screen_name || qa.username || qUser || 'Autor cytowanego wpisu',
+    authorUser: qa.screen_name || qa.username || userLegacy.screen_name || qUser || 'unknown',
+    authorAvatar: avatarHd(qa.avatar_url || qa.avatar || qa.profile_image_url || userLegacy.profile_image_url_https || userLegacy.profile_image_url || null),
+    verified: Boolean(qa.verified || qa.is_blue_verified || qa.blue_verified || qa.verified_type || coreUser.is_blue_verified || userLegacy.verified),
+    stats: normalizeStats({ ...legacy, ...q }, q),
     media: qMedia,
     isQuoted: true
   };
@@ -534,7 +634,16 @@ async function buildQuotedPayload(quoted) {
   }
 
   const stats = buildStatsLine(quoted);
-  const quotedText = prettyText(truncate(quoted.text || 'Brak tekstu w cytowanym wpisie.', 650));
+  const shouldTranslateQuote = Boolean(quoted.text) && !IGNORE_LANGS.includes((quoted.lang || '').toLowerCase());
+  let quotedDisplayText = quoted.text || 'Brak tekstu w cytowanym wpisie.';
+  if (shouldTranslateQuote) {
+    try {
+      quotedDisplayText = await translateText(quoted.text, quoted.lang, TARGET_LANG);
+    } catch (e) {
+      console.warn('Nie udało się przetłumaczyć cytowanego wpisu:', e.message);
+    }
+  }
+  const quotedText = prettyText(truncate(quotedDisplayText, 650));
   const description = [stats ? `*${stats}*` : '', quotedText].filter(Boolean).join('\n\n');
 
   const embed = new EmbedBuilder()
@@ -602,16 +711,19 @@ async function sendTweetMessage(message, tweet, translated, didTranslate, fx, or
   }
 
   const embed = buildMainEmbed(tweet, summary ? `**W skrócie:** ${truncate(summary, 180)}\n\n${translated}` : translated, didTranslate);
-  return message.channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+  return message.channel.send({
+    embeds: [embed, ...quotedPayload.embeds],
+    files: quotedPayload.files,
+    allowedMentions: { parse: [] }
+  });
 }
 
 client.once('clientReady', c => {
   console.log(`Bot zalogowany jako ${c.user.tag}`);
   console.log(`Tłumaczenie na: ${TARGET_LANG}`);
   console.log(`Języki bez tłumaczenia, ale z wpisem: ${IGNORE_LANGS.join(', ')}`);
-  console.log(`Tryb mediów: v33 no OpenAI, DeepL -> Google fallback`);
+  console.log(`Tryb mediów: v34 quoted context fixed, DeepL -> Google fallback`);
 });
-client.once('ready', c => console.log(`Bot zalogowany jako ${c.user.tag}`));
 
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
